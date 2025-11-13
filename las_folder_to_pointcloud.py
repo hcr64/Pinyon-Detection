@@ -11,7 +11,7 @@ import os
 FOLDER = '/content/drive/My Drive/Sunset_Crater_trial/point_cloud/'
 
 # the function itself, 
-def las_folder_to_pointcloud( folder_path=FOLDER ):
+def las_folder_to_pointcloud( folder_path=FOLDER, save_to_drive=False ):
 
   # the combined, final point cloud
   combined_pcd = o3d.geometry.PointCloud()
@@ -37,6 +37,11 @@ def las_folder_to_pointcloud( folder_path=FOLDER ):
     combined_pcd.points = o3d.utility.Vector3dVector(
       np.vstack( ( np.asarray(combined_pcd.points), np.asarray(pcd.points) ) )
       )
-    
+
+    # if save_to_drive=true, save the large point cloud to the folder
+    if( save_to_drive )
+    {
+
+    }
     print( combined_pcd )
     
