@@ -4,6 +4,20 @@ from sklearn.metrics import classification_report
 import pandas as pd
 
 def train_tree_classifier(df_deep, df_labels_matched):
+    """ 
+    Desc:
+        Trains a random forest model on the dataframes and returns it. 
+    Args:
+        df_deep, df: The returned df from make_deep_dataframe.
+        df_labels_matched, df: The returned df from match_labels_to_clusters.
+
+    Returns:
+        model: The trained random forest model.
+        features: Columns/ variables to train the (random forest) model on.
+
+    Requirements:
+        sklearn.enesemble, sklearn.model_selection, sklearn.metrics, pandas
+    """
 
     # merge features with labels
     df = df_deep.merge(df_labels_matched[["file", "Name"]], on="file")

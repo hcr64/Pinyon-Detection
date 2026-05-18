@@ -21,16 +21,13 @@ from functions.cluster_pointcloud import cluster_pointcloud
 from functions.get_pointcloud_stats import clusters_to_dataframe
 from functions.match_labels_to_clusters import match_labels_to_clusters
 
-# saving clusters
+# working with clusters
 from functions.save_clusters import save_clusters
+from functions.split_large_clusters import split_large_clusters
 
 # model training
 from functions.get_deep_cluster_features import make_deep_dataframe
 from functions.train_tree_classifier import train_tree_classifier
-
-# include my constants
-# import constants
-import open3d as o3d
 
 print("Sucessfully loaded all packages.")
 
@@ -44,18 +41,20 @@ def main():
 	print()
 	print()
 
-	if MAKE_CLUSTERS:
+	# read in the point cloud from .las files.
+	# The cleaned pointcloud can be saved, if so this does not need to be repeated, can be time consuming, ~10 minutes. 
+	# If GREEN_THRESHOLD or VOXEL_SIZE get changed, this needs to get ran again. Clustering variables do not matter here.
+	if STEPS['Clean_Pointcloud']:
 		# get the point cloud from the las files in the drive
 		print('Loading point cloud...')
 		point_cloud = las_folder_to_pointcloud( 
-			DATA_PATH, 
+			PATHS['Data'], 
 			silent=SILENT, 
 			downsize_pcd=DOWNSIZE,
 			v_size=VOXEL_SIZE )
 
 		print('Point cloud successfully loaded.\n')
 		print()
-
 
 		# check the points
 		print(point_cloud)
@@ -69,53 +68,76 @@ def main():
 		# check points again
 		print(point_cloud)
 
+		# save the cleaned pointcloud to monsoon
+		print("Saving cleaned pointcloud...")
+		o3d.io.write_point_cloud( PATHS['Cleaned_pcd'], point_cloud )
+		print("Cleaned pointcloud saved.")
+		print()
+
+	# since the pointcloud is not being processed, load it in instead.
+	else:
+		# read the saved point cloud in
+		print(f"Reading in cleaned pointcloud... (from {PATHS['Cleaned_pcd']})")
+		point_cloud = o3d.io.read_point_cloud( PATHS['Cleaned_pcd'] )
+		print("Cleaned point cloud read in.")
+		print()
+
+
+
+	# cluster the 'cleaned' pointcloud into tree clusters.
+	# Sometimes unecesary if clusters are already saved. Also can take ~3 minutues to run, so can be worth it to skip.
+	if STEPS['Make_Clusters']:
 		# get clusters from the point cloud
 		print("Clustering point cloud...")
 		clusters, labels = cluster_pointcloud( point_cloud, eps=EPS, min_points=MIN_POINTS )
 		print("Point cloud clustered.")
 		print()
 
+		# split clusters into smaller if too large
+		print("Splitting clusters...")
+		clusters = split_large_clusters(clusters, max_radius=MAX_RADIUS)
+		print("Clusters split.")
+		print()
+
 		# save the clusters in the clusters folder
 		print("Saving clusters...")
-		save_clusters( clusters, CLUSTER_PATH )
+		save_clusters( clusters, PATHS['Clusters'] )
 		print("Clusters saved.")
 		print()
+	
+	# since the clusters are not being processed, read them in instead, NOT CURRENTLY NEEDED 
+	# Functions after this access clusters from their path, so uneeded so far. 
+	else:
+		pass
 
 	# get the cluster df
 	print("Making cluster df...")
-	df_clusters = clusters_to_dataframe( CLUSTER_PATH )
+	df_clusters = clusters_to_dataframe( PATHS['Clusters'] )
 	print("Cluster df made.")
 	print()
 
 	# get the deep data cluster df
 	print("Making deep data cluster df...")
-	df_deep_clusters = make_deep_dataframe( CLUSTER_PATH )
+	df_deep_clusters = make_deep_dataframe( PATHS['Clusters'] )
 	print("Deep data cluster df made.")
 	print()
 
-	# clean up the labels' names
-
 	# assign lables to clusters
 	print("Assigning labels to clusters...")
-	df_clusters = match_labels_to_clusters( LABELS_PATH, df_clusters, max_distance=MAX_DISTANCE )
+	df_clusters = match_labels_to_clusters( 
+		PATHS['Labels'], 
+		df_clusters, 
+		max_distance=MAX_DISTANCE,
+		eps=EPS,
+		max_radius=MAX_RADIUS
+		 )
 	print("Labels assigned.")
 	print()
 
-	# train the model 
-	if TRAIN_MODEL:
-		# usage
+	# training the model, never too time consuming, generally less than a minute or two.
+	if STEPS['Train_Model']:
 		# model = train_tree_classifier(df_deep_clusters, df_clusters)
 		model, features = train_tree_classifier(df_deep_clusters, df_clusters)
-
-		# predict on all clusters including unlabeled ones
-		features = [
-			"height", "radius", "n_points",
-			"obb_extent_x", "obb_extent_y", "obb_extent_z",
-			"eigenvalue_1", "eigenvalue_2", "eigenvalue_3",
-			"linearity", "planarity", "sphericity",
-			"mean_r", "mean_g", "mean_b",
-			"std_r", "std_g", "std_b"
-		]
 
 		# only label as pinyon if model is >80% confident
 		probs = model.predict_proba(df_deep_clusters[features])
@@ -132,7 +154,6 @@ def main():
 
 		print(f"High confidence pinyons: {len(confirmed_pinyons)}")
 
-		df_deep_clusters["predicted_label"] = model.predict(df_deep_clusters[features])
 		print(df_deep_clusters[["file", "predicted_label"]])
 
 	print("Program complete.")

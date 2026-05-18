@@ -5,6 +5,19 @@ import os
 
 
 def make_deep_dataframe( clusters_folder ):
+    """ 
+    Desc:
+        Creates a .csv/spreadsheet of advanced metrics on clusters to train models on. Takes a folder path with all the clusters.
+    Args:
+        clusters_folder, str: Folder path with all of the clusters (.ply) in it. make sure nothing else is there.
+
+    Returns:
+        df_deep: A Pandas dataframe with info on all clsuters in the folder.
+        
+    Requirements:
+        numpy, pandas, open3d, os
+    """
+
     # build dataframe from clusters
     rows = []
     for file in os.listdir(clusters_folder):
@@ -20,6 +33,19 @@ def make_deep_dataframe( clusters_folder ):
 
 # support function
 def get_deep_cluster_features(pcd):
+    """ 
+    Desc:
+        Supplemental function to make_deep_dataframe. Creates an dict of stats for a single cluster. Will be a row in the final csv.
+    Args:
+        pcd, Open3D pointcloud: A single clsuter from the folder (.ply).
+
+    Returns:
+        features: Array of features on the given cluster.
+        
+    Requirements:
+        numpy, pandas, open3d, os
+    """
+
     points = np.asarray(pcd.points)
     colors = np.asarray(pcd.colors)
 

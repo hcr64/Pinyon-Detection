@@ -2,6 +2,20 @@ import open3d as o3d
 import os
 
 def save_clusters(clusters, save_path):
+    """ 
+    Desc:
+        Saves the given array of pointcloud clusters to the given path.
+        
+    Args:
+        clusters, array of poincloud (.ply) clusters: An array of pointcloud (.ply) clusters. 
+        save_path, str: Location to save the clusters.
+
+    Returns:
+        Void
+        
+    Requirements:
+        open3d, os
+    """
 
     # delete everything in the folder before saving
     if os.path.exists(save_path):
@@ -13,6 +27,6 @@ def save_clusters(clusters, save_path):
     # save the clusters
     for index in range(len(clusters)):
         o3d.io.write_point_cloud(f"{save_path}cluster{index}.ply", clusters[index])
-        print(f"Cluster {index} saved.")
+        # print(f"Cluster {index} saved.")
 
     print(f"All {len(clusters)} clusters saved to {save_path}")

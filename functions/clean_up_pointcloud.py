@@ -1,8 +1,21 @@
 import open3d as o3d
 import numpy as np
-
+ 
 def clean_up_pointcloud(point_cloud, green_threshold=0.01):
-    
+    """ 
+    Desc:
+        Strips a given pointcloud of all non-green points. Returns stripped pcd as open3D pcd object.
+
+    Args:
+        point_cloud, open3D pointcloud: the pointcloud to be 'stripped' down.
+        green_threshold, double: How inclusive the stripping process is. The closer to 1, the less inclusive to pixels.
+
+    Returns:
+        The pointcloud parameter minus all voxels that do not meet the trheshold. 
+        
+    Requirements:
+        numpy, open3d
+    """
     if not point_cloud.has_colors():
         print("Warning: no color data, skipping green filter.")
         return point_cloud

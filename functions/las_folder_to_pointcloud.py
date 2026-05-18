@@ -6,6 +6,24 @@ import os
 
 
 def las_folder_to_pointcloud(folder_path, rm_floor=False, silent=False, downsize_pcd=True, v_size=0.05):
+    """ 
+    Desc:
+        Turn .las files into a single PointCloud object(Open3D), which is returned. Takes a folder full of .las files to create one PointCloud.
+
+    Args:
+        folder_path, str: A path to the local folder where the .las files are. Be sure that no files other than .las are present here.
+        rm_floor, bool: Currently incomplete, keep false.
+        siltent, bool: If true, prints more progress messages, no functional change.
+        downsize pcd, bool: If the PointCloud should be downsized or not. T = PC gets downsized, F = no downsizing.
+        v_size, double (0.01-0.1): How much the pointcloud gets downsized, in meters.
+
+    Returns:
+        A complete pointcloud made from the .las files in folder_path. It is an Opend3D pointcloud object.
+
+    Requirements:
+        numpy, pandas, laspy, open3d, os
+    """
+
     if not silent:
         print("begin las_folder_to_pointcloud...")
 
@@ -17,8 +35,8 @@ def las_folder_to_pointcloud(folder_path, rm_floor=False, silent=False, downsize
         print("begin iterating through files...")
 
     for file in folder_contents:
-
-        print(f"Loading {file}...")
+        if not silent:
+            print(f"Loading {file}...")
 
         las = laspy.read(folder_path + file)
 
