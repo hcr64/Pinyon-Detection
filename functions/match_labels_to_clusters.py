@@ -1,11 +1,13 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import os
+
 from pyproj import Transformer
 from scipy.spatial import KDTree
 
 def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.0, eps=2.0,
-    max_radius=2.0, graph_save_path="/home/hcr64/Pinyon-Detection/images/"):
+    max_radius=2.0, green_threshold=0.03, graph_save_path="/home/hcr64/Pinyon-Detection/images/"):
     """ 
     Desc:
         Creates a .csv/spreadsheet of advanced metrics on clusters to train models on. Takes a folder path with all the clusters. 
@@ -47,6 +49,13 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
     csv_coords     = np.column_stack((easting, northing))
     cluster_coords = np.array(list(zip(df_clusters["x_pos"], df_clusters["y_pos"])))
 
+    # calculate the score
+    score = calculate_matching_score(
+        csv_coords, 
+        cluster_coords, 
+        max_distance=max_distance
+        )
+
     # plot overlap
     plt.figure(figsize=(10, 10))
     colors = {"pinyon": "red", "juniper": "blue", "ponderosa": "orange"}
@@ -58,7 +67,7 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
     print("Num Graph Points:", len(csv_coords) )
 
     # generate a title for the graph
-    graph_title = f"EPS:{eps}-MAX_RADIUS:{max_radius}"
+    graph_title = f"EPS:{eps}-MR:{max_radius}-GT:{green_threshold}-MD:{max_distance}"
 
     # make the plot of GPS coords and clsuter locations
     plt.scatter(cluster_coords[:,0], cluster_coords[:,1], c="green", label="clusters", s=1, alpha=0.3)
@@ -67,6 +76,11 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
     plt.ylabel("Northing")
 
     plt.title(graph_title)
+
+    # if the path does not exist,
+    if not os.path.exists( graph_save_path ):
+        # create it
+        os.makedirs( graph_save_path )
 
     # save it to the desired path
     plt.savefig(graph_save_path + graph_title + ".png")
@@ -80,4 +94,42 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
     df_clusters["label_distance"] = distances
     df_clusters.loc[df_clusters["label_distance"] > max_distance, "Name"] = "unknown"
 
-    return df_clusters
+    return df_clusters, score
+
+# for calculating cluster / GPS points matching
+def calculate_matching_score(csv_coords, cluster_coords, max_distance=5.0):
+    """
+    Score is based on:
+    - GPS points with exactly one nearby cluster = good
+    - GPS points with no nearby cluster = bad
+    - GPS points with multiple nearby clusters = bad
+    """
+
+    tree = KDTree(cluster_coords)
+    
+    # for each GPS point, find all clusters within max_distance
+    results = tree.query_ball_point(csv_coords, r=max_distance)
+    
+    n_gps         = len(csv_coords)
+    perfect       = 0  # exactly 1 cluster nearby
+    no_match      = 0  # 0 clusters nearby
+    multi_match   = 0  # 2+ clusters nearby
+
+    for matches in results:
+        n = len(matches)
+        if n == 0:
+            no_match += 1
+        elif n == 1:
+            perfect += 1
+        else:
+            multi_match += 1
+
+    score = perfect / n_gps  # 0.0 to 1.0
+
+    print(f"GPS points:              {n_gps}")
+    print(f"Perfect matches (1:1):   {perfect}  ({100*perfect/n_gps:.1f}%)")
+    print(f"No match:                {no_match}  ({100*no_match/n_gps:.1f}%)")
+    print(f"Multiple clusters:       {multi_match}  ({100*multi_match/n_gps:.1f}%)")
+    print(f"Matching score:          {score:.3f}")
+
+    return score

@@ -30,3 +30,21 @@ def save_clusters(clusters, save_path):
         # print(f"Cluster {index} saved.")
 
     print(f"All {len(clusters)} clusters saved to {save_path}")
+
+def load_clusters( save_path ):
+    # the array of clusters to return 
+    clusters = []
+
+    # for each saved cluster file in the file
+    for file in os.listdir( save_path ):
+        # make sure a pointcloud is being read
+        if file.endswith(".ply"):
+
+            # get the pointcloud object
+            pcd = o3d.io.read_point_cloud( os.path.join( save_path, file ) )
+            
+            # add it to the array
+            clusters.append( pcd )
+
+    # return the cluster array
+    return clusters

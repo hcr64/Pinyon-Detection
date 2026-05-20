@@ -5,7 +5,7 @@ import open3d as o3d
 import os
 
 # a function to put all the pinyon stats into a df
-def clusters_to_dataframe(clusters_folder):
+def clusters_to_dataframe( clusters ):
     """ 
     Desc:
         Creates a .csv/spreadsheet of generic metrics on clusters to make some graphs. Takes a folder path with all the clusters.
@@ -19,16 +19,14 @@ def clusters_to_dataframe(clusters_folder):
         numpy, pandas, open3d, os
     """
 
-    rows = []
+    rows = []      
 
-    for file in os.listdir(clusters_folder):
-        if file.endswith(".ply"):
-            path = os.path.join(clusters_folder, file)
-            stats = get_pointcloud_stats(path)
-            stats["file"] = file  # keep track of which file
-            rows.append(stats)
+    for i, cluster in enumerate(clusters):
+        stats = get_pointcloud_stats( cluster )
+        stats["file"] = i
+        rows.append( stats )
 
-    df = pd.DataFrame(rows)
+    df = pd.DataFrame( rows )
 
     # sort by file name
     df = df.sort_values("file").reset_index(drop=True)
@@ -36,7 +34,7 @@ def clusters_to_dataframe(clusters_folder):
     return df
 
 # a function to get stats from a pointcloud, returns array
-def get_pointcloud_stats(pcd_path, silent=True):
+def get_pointcloud_stats(pcd, silent=True):
     """ 
     Desc:
         Supplental function to clusters_to_dataframe. Creates a single row of cluster statistics.
@@ -51,7 +49,7 @@ def get_pointcloud_stats(pcd_path, silent=True):
     """
 
     # read the pointcloud
-    pcd = o3d.io.read_point_cloud(pcd_path)
+    # pcd = o3d.io.read_point_cloud(pcd_path)
     points = np.asarray(pcd.points)
 
     # bounding box

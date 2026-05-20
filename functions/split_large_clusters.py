@@ -2,7 +2,7 @@ import numpy as np
 from sklearn.cluster import KMeans
 import open3d as o3d
 
-def split_large_clusters(clusters, max_radius=2.0):
+def split_large_clusters(clusters, min_points=10, max_radius=2.0):
     final_clusters = []
     
     for pcd in clusters:
@@ -23,7 +23,7 @@ def split_large_clusters(clusters, max_radius=2.0):
             for i in range(n_splits):
                 mask = sub_labels == i
                 sub_pcd = pcd.select_by_index(np.where(mask)[0])
-                if len(sub_pcd.points) > 10:  # ignore tiny fragments
+                if len(sub_pcd.points) > min_points:  # ignore tiny fragments
                     final_clusters.append(sub_pcd)
         else:
             final_clusters.append(pcd)
