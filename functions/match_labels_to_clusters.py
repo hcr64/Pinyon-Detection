@@ -7,7 +7,7 @@ from pyproj import Transformer
 from scipy.spatial import KDTree
 
 def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.0, eps=2.0,
-    max_radius=2.0, green_threshold=0.03, graph_save_path="/home/hcr64/Pinyon-Detection/images/"):
+    max_radius=2.0, green_threshold=0.03, min_points=50, graph_save_path="/home/hcr64/Pinyon-Detection/images/"):
     """ 
     Desc:
         Creates a .csv/spreadsheet of advanced metrics on clusters to train models on. Takes a folder path with all the clusters. 
@@ -49,6 +49,9 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
     csv_coords     = np.column_stack((easting, northing))
     cluster_coords = np.array(list(zip(df_clusters["x_pos"], df_clusters["y_pos"])))
 
+    # get a graph of points with too many/none clusters 
+    plot_gps_cluster_overlap(csv_coords, cluster_coords, df_labels, max_distance=max_distance)
+
     # calculate the score
     score = calculate_matching_score(
         csv_coords, 
@@ -67,7 +70,7 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
     print("Num Graph Points:", len(csv_coords) )
 
     # generate a title for the graph
-    graph_title = f"EPS:{eps}-MR:{max_radius}-GT:{green_threshold}-MD:{max_distance}"
+    graph_title = f"EPS:{eps}-MR:{max_radius}-GT:{green_threshold}-MPts:{min_points}-MD:{max_distance}"
 
     # make the plot of GPS coords and clsuter locations
     plt.scatter(cluster_coords[:,0], cluster_coords[:,1], c="green", label="clusters", s=1, alpha=0.3)
@@ -133,3 +136,64 @@ def calculate_matching_score(csv_coords, cluster_coords, max_distance=5.0):
     print(f"Matching score:          {score:.3f}")
 
     return score
+
+
+# supplemental function to make the overlay graph 
+def plot_gps_cluster_overlap(csv_coords, cluster_coords, df_labels, max_distance=5.0, save_path="/home/hcr64/Pinyon-Detection/coordinate_overlap.png"):
+
+    tree = KDTree(cluster_coords)
+    results = tree.query_ball_point(csv_coords, r=max_distance)
+
+    # categorize each GPS point
+    perfect    = []
+    no_match   = []
+    multi      = []
+
+    for i, matches in enumerate(results):
+        n = len(matches)
+        if n == 0:
+            no_match.append(i)
+        elif n == 1:
+            perfect.append(i)
+        else:
+            multi.append(i)
+
+    perfect    = np.array(perfect)
+    no_match   = np.array(no_match)
+    multi      = np.array(multi)
+
+    fig, ax = plt.subplots(figsize=(12, 12))
+
+    # plot clusters in background
+    ax.scatter(cluster_coords[:, 0], cluster_coords[:, 1],
+               c="lightgreen", s=1, alpha=0.3, label="Clusters")
+
+    # plot GPS points colored by match quality
+    if len(perfect):
+        ax.scatter(csv_coords[perfect, 0], csv_coords[perfect, 1],
+                   c="blue", s=40, label="Perfect match (1 cluster)", zorder=3)
+
+    if len(no_match):
+        ax.scatter(csv_coords[no_match, 0], csv_coords[no_match, 1],
+                   c="red", s=60, marker="x", label="No cluster nearby", zorder=3, linewidths=2)
+
+    if len(multi):
+        ax.scatter(csv_coords[multi, 0], csv_coords[multi, 1],
+                   c="orange", s=60, marker="^", label=f"Multiple clusters nearby", zorder=3)
+
+    # annotate with species name
+    for i, (x, y) in enumerate(csv_coords):
+        ax.annotate(df_labels["Name"].iloc[i], (x, y),
+                    fontsize=6, alpha=0.7,
+                    xytext=(3, 3), textcoords="offset points")
+
+    ax.set_xlabel("Easting")
+    ax.set_ylabel("Northing")
+    ax.set_title(f"GPS Points vs Clusters (max_distance={max_distance}m)\n"
+                 f"Perfect: {len(perfect)}  |  No match: {len(no_match)}  |  Multiple: {len(multi)}")
+    ax.legend()
+
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150)
+    plt.close()
+    print(f"Saved plot to {save_path}")

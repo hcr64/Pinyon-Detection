@@ -3,6 +3,8 @@ import numpy as np
 import pandas as pd
 import open3d as o3d
 import os
+from scipy.spatial import KDTree
+
 
 # a function to put all the pinyon stats into a df
 def clusters_to_dataframe( clusters ):
@@ -66,7 +68,10 @@ def get_pointcloud_stats(pcd, silent=True):
     radius = max(width_x, width_y) / 2
 
     # center position (x, y)
-    center = aabb.get_center()
+    # center = aabb.get_center()
+
+    center = density_weighted_center(points)
+
     x_pos = center[0]
     y_pos = center[1]
 
@@ -92,3 +97,12 @@ def get_pointcloud_stats(pcd, silent=True):
           print(f"{k}: {v}")
 
     return stats
+
+# get center values wewighted on the amount of points, to reduce impacts of grass, bushes, etc.
+def density_weighted_center(points, k=10):
+    tree = KDTree(points)
+    distances, _ = tree.query(points, k=k)
+    # local density = inverse of mean distance to k neighbors
+    density = 1.0 / (distances[:, 1:].mean(axis=1) + 1e-6)
+    weights = density / density.sum()
+    return (points * weights[:, np.newaxis]).sum(axis=0)

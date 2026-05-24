@@ -5,14 +5,13 @@ import open3d as o3d
 import os
 
 
-def las_folder_to_pointcloud(folder_path, rm_floor=False, silent=False, downsize_pcd=True, v_size=0.05):
+def las_folder_to_pointcloud(folder_path, silent=False, downsize_pcd=True, v_size=0.05):
     """ 
     Desc:
         Turn .las files into a single PointCloud object(Open3D), which is returned. Takes a folder full of .las files to create one PointCloud.
 
     Args:
         folder_path, str: A path to the local folder where the .las files are. Be sure that no files other than .las are present here.
-        rm_floor, bool: Currently incomplete, keep false.
         siltent, bool: If true, prints more progress messages, no functional change.
         downsize pcd, bool: If the PointCloud should be downsized or not. T = PC gets downsized, F = no downsizing.
         v_size, double (0.01-0.1): How much the pointcloud gets downsized, in meters.
@@ -92,20 +91,5 @@ def las_folder_to_pointcloud(folder_path, rm_floor=False, silent=False, downsize
     
     print("Done iterating through files.\n")
     
-    # Downsample — voxel_down_sample preserves color automatically
-    if downsize_pcd:
-        print("Downsizing pointcloud...")
-        combined_pcd = combined_pcd.voxel_down_sample(voxel_size=v_size)
-        print("Done downsizing.")
-
-    if rm_floor:
-        plane_model, inliers = combined_pcd.segment_plane(
-            distance_threshold=0.05,
-            ransac_n=3,
-            num_iterations=1000
-        )
-        ground         = combined_pcd.select_by_index(inliers)
-        forest_no_floor = combined_pcd.select_by_index(inliers, invert=True)
-        o3d.io.write_point_cloud("forest_no_floor.ply", forest_no_floor)
 
     return combined_pcd
