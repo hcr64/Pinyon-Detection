@@ -18,29 +18,8 @@ from scipy.spatial import KDTree
 # include the constants folder
 from constants import * 
 
-# include my custom functions
-from functions.las_folder_to_pointcloud import las_folder_to_pointcloud
-
-# point cloud cleaning
-from functions.clean_up_pointcloud import clean_up_pointcloud
-from functions.build_chm import normalize_heights_by_ground
-
-# clustering
-from functions.cluster_pointcloud import cluster_pointcloud
-
-# getting stats/labels
-from functions.get_pointcloud_stats import clusters_to_dataframe
-from functions.match_labels_to_clusters import match_labels_to_clusters
-
-# working with clusters
-from functions.save_clusters import save_clusters
-from functions.save_clusters import load_clusters
-from functions.split_large_clusters import split_large_clusters
-from functions.filter_clusters import filter_cluster
-
-# model training
-from functions.get_deep_cluster_features import make_deep_dataframe
-from functions.train_tree_classifier import train_tree_classifier
+# include all my custom functions
+from functions import *
 
 print("Sucessfully loaded all packages.")
 
@@ -55,9 +34,15 @@ def main():
 	parser.add_argument("--max_distance",     type=float, required=True)
 	parser.add_argument("--min_points",     type=int, required=True)
 	parser.add_argument("--voxel_size", type=float, required=True)
+	parser.add_argument("--min_peak_distance", type=float, required=True)
+	parser.add_argument("--k", type=int, required=True)
+	# parser.add_argument("--min_density_ratio", type=float, required=True)
+
 
 	# for files and such, also a command line arg
 	parser.add_argument("--trial_name",     type=str, required=True)
+	parser.add_argument("--job_id",     type=str, required=True)
+
 
 	# get list of command line args
 	args = parser.parse_args()
@@ -69,32 +54,49 @@ def main():
 	MAX_DISTANCE    = args.max_distance
 	MIN_POINTS		= args.min_points
 	VOXEL_SIZE      = args.voxel_size
+	MIN_PEAK_DISTANCE = args.min_peak_distance
+	K = args.k
+	MIN_DENSITY_RATIO = 1.5 # args.min_density_ratio
+
+	MIN_HEIGHT = 1.0
+	SEARCH_RADIUS_M = 2.0
 
 	# for saving/reading files off location. 
 	TRIAL_NAME		= args.trial_name
 
-	NORMALIZE_HEIGHTS=True
+	# for identifying what graphs come from which jobs
+	JOB_ID = args.job_id
+
+	NORMALIZE_HEIGHTS=False
 
 
-	# print general settings
+	# print general settings / command line args
 	print()
 	print()
 	print("#### SETTINGS ####")
 	print("EPS:", EPS)
 	print("MIN_POINTS:", MIN_POINTS)
 	print("GREEN_THRESHOLD:", GREEN_THRESHOLD)
+	print("MAX_DISTANCE:", MAX_DISTANCE)
+	print("MAX_RADIUS:", MAX_RADIUS)
+	print("VOXEL_SIZE:", VOXEL_SIZE)
+	print("MIN_PEAK_DISTANCE:", MIN_PEAK_DISTANCE)
+	print("K:", K)	
+	print("MIN_DESNITY_RATIO:", MIN_DENSITY_RATIO)
+
+	# set k to min points
+	K = MIN_POINTS
+
+	# non-calculation vars
 	print("TRIAL_NAME:", TRIAL_NAME)
+	print("JOB_ID:", JOB_ID)
+
 
 	# print the start time
 	print("Program Start Time: " + datetime.now().strftime("%H:%M:%S"))
 	print()
 	print()
 
-	# variables
-
-	# the location of where the cleaned pcd should be
-	CLEANED_PCD_PATH = f"{PATHS['Pointclouds'].format( TRIAL_NAME )}/cleaned_pcd.ply"
-	RAW_PCD_PATH = f"{PATHS['Pointclouds'].format( TRIAL_NAME )}/raw_pcd.ply"
 
 	# read in the point cloud from .las files.
 	# The cleaned pointcloud can be saved, if so this does not need to be repeated, can be time consuming, ~10 minutes. 
@@ -104,7 +106,7 @@ def main():
 		# get the point cloud from the las files in the drive
 		print('Loading point cloud...')
 		point_cloud = las_folder_to_pointcloud( 
-			PATHS['Data'].format( TRIAL_NAME ), 
+			PATHS['Data'], 
 			silent=SILENT, 
 			downsize_pcd=DOWNSIZE,
 			v_size=VOXEL_SIZE )
@@ -113,41 +115,91 @@ def main():
 		print()
 
 		# save the pointcloud to a folder 
-		print(f"Saving raw point cloud... ( to { RAW_PCD_PATH }")
+		print(f"Saving raw point cloud... ( to { PATHS['Raw_pcd'] }")
 
 		# make sure the dir exists first
-		if not os.path.exists( PATHS['Pointclouds'].format( TRIAL_NAME ) ):
+		if not os.path.exists( os.path.dirname( PATHS['Raw_pcd'] ) ):
 			# if it does not, create it
-			os.makedirs( PATHS['Pointclouds'].format( TRIAL_NAME ) )
+			os.makedirs( os.path.dirname( PATHS['Raw_pcd'] ) )
 
 		# now load it in
-		o3d.io.write_point_cloud( f"{ RAW_PCD_PATH }", point_cloud)
+		o3d.io.write_point_cloud( f"{ PATHS['Raw_pcd'] }", point_cloud)
 		print('Raw point cloud successfully saved.\n')
 		print()
 
-	# load the pointcloud in from save
-	else:
+
+	# load the pointcloud in from save, if will be cleaned or used in the CHM, 
+	# otherwise, the cleaned pointcloud is being read in
+	elif STEPS['Clean_Pointcloud'] or STEPS['Make_CHM']:
+
 		# read the saved point cloud in
-		print(f"Reading in raw pointcloud... (from {PATHS['Pointclouds'].format( TRIAL_NAME )})")
+		print(f"Reading in raw pointcloud... (from {PATHS['Raw_pcd']})")
 
 		# make sure the path exists first
-		if os.path.exists( f"{PATHS['Pointclouds'].format( TRIAL_NAME )}" ):
-			point_cloud = o3d.io.read_point_cloud( RAW_PCD_PATH )
-			print("Raw point cloud read in.")
+		if os.path.exists( os.path.dirname( PATHS['Raw_pcd'] ) ):
+			point_cloud = o3d.io.read_point_cloud( PATHS['Raw_pcd'] )
+			print(f"Raw point cloud read in. ({PATHS['Raw_pcd']})")
 		
 		# if it doesnt,
 		else:
 			# print error message and quit the program
-			print(f"Could not find pointcloud save path ({RAW_PCD_PATH}). Exiting program...")
+			print(f"Could not find pointcloud save path ({PATHS['Raw_pcd']}). Exiting program...")
 			return 1
 
 		print()
 
 
-	# downsize the pointcloud do this regardless of loading it in or not
-	print("Downsizing pointcloud...")
-	point_cloud = point_cloud.voxel_down_sample(voxel_size=VOXEL_SIZE)
-	print("Done downsizing.")
+
+	# only do this if the CHM is being made, or if the pointcloud will be cleaned. 
+	# Otherwise this whill have no effect on the program
+	if STEPS['Make_CHM'] or STEPS['Clean_Pointcloud']:
+		# downsize the pointcloud do this regardless of loading it in or not
+		print("Downsizing pointcloud...")
+		point_cloud = point_cloud.voxel_down_sample(voxel_size=VOXEL_SIZE)
+		print("Done downsizing.")
+		print()
+
+
+
+	# make the cfm model if desired
+	if STEPS['Make_CHM']:
+		print('Making CHM...')
+		chm, transform, crs = build_chm(
+			point_cloud,
+			resolution=0.5,
+			ground_percentile=5,
+			save_path=PATHS['CHM']
+			)
+		print(f"CHM complete. (Saved to {PATHS['CHM']})")
+		print()
+
+	# otherwise, load it in from disk,
+	# always do one or another, no other condition needed
+	else:
+		# check if the path is legit
+		if os.path.exists( PATHS['CHM'] ):
+			chm = load_chm( PATHS['CHM'] )
+			print("Cleaned point cloud read in.")
+			
+		else:
+			# print an error message and quit
+			print(f"Cannot find CHM save path. ({ PATHS['CHM'] }) Exiting program...")
+			return 1
+
+		print(f"Loading in CHM... (from { PATHS['CHM'] })")
+
+		print('CMF loaded in successfully.')
+
+	# get the peaks from the pointcloud
+	# do either way
+	print("Finding peaks in CHM...")
+	peak_coords, peak_heights = find_chm_peaks(
+		chm, 
+		transform, 
+		min_height=MIN_HEIGHT, 
+		search_radius_m=SEARCH_RADIUS_M)
+	print()
+
 
 
 	# 'Clean' the read in point cloud, doesn't take too long. 
@@ -162,9 +214,10 @@ def main():
 		print(f"Any NaN: {np.any(np.isnan(points))}")
 
 		# get CHM features
-		print("Normalizing heights by ground surface...")
-		point_cloud = normalize_heights_by_ground(point_cloud, resolution=0.5)
-		print("Heights normalized.")
+		if NORMALIZE_HEIGHTS:
+			print("Normalizing heights by ground surface...")
+			point_cloud = normalize_heights_by_ground(point_cloud, resolution=0.5)
+			print("Heights normalized.")
 
 		# 'clean up' the point cloud, remove noise, the floor, etc
 		print("Cleaning up point cloud...")
@@ -179,32 +232,34 @@ def main():
 		print("Saving cleaned pointcloud...")
 
 		# if the path does not exist,
-		if not os.path.exists( os.path.dirname( PATHS['Pointclouds'].format( TRIAL_NAME ) ) ):
-			os.makedirs( os.path.dirname( PATHS['Pointclouds'].format( TRIAL_NAME ) ) )
+		if not os.path.exists( os.path.dirname( PATHS['Cleaned_pcd'] ) ):
+			os.makedirs( os.path.dirname( PATHS['Cleaned_pcd'] ) )
 
 		# write to the folder
-		o3d.io.write_point_cloud( CLEANED_PCD_PATH, point_cloud )
+		o3d.io.write_point_cloud( PATHS['Cleaned_pcd'], point_cloud )
 		print("Cleaned pointcloud saved.")
 		print()
 
 	# since the pointcloud is not being processed, load it in instead.
-	else:
+	# only do so if the clusters will be made. Otherwise the cleaned pcd will not be used
+	elif STEPS['Make_Clusters']:
 		
 		# read the saved point cloud in
-		print(f"Reading in cleaned pointcloud... (from { CLEANED_PCD_PATH })")
+		print(f"Reading in cleaned pointcloud... (from { PATHS['Cleaned_pcd'] })")
 
 		# make sure the path exists first
-		if os.path.exists( f"{PATHS['Pointclouds'].format( TRIAL_NAME ) }" ):
-			point_cloud = o3d.io.read_point_cloud( CLEANED_PCD_PATH )
+		if os.path.exists( os.path.dirname(PATHS['Cleaned_pcd']) ):
+			point_cloud = o3d.io.read_point_cloud( PATHS['Cleaned_pcd'] )
 			print("Cleaned point cloud read in.")
 		
 		# if it doesnt,
 		else:
 			# print error message and quit the program
-			print(f"Could not find pointcloud save path ({ CLEANED_PCD_PATH }). Exiting program...")
+			print(f"Could not find pointcloud save path ({ PATHS['Cleaned_pcd'] }). Exiting program...")
 			return 1
 
 		print()
+
 
 
 	# cluster the 'cleaned' pointcloud into tree clusters.
@@ -213,7 +268,13 @@ def main():
 	if STEPS['Make_Clusters']:
 		# get clusters from the point cloud
 		print("Clustering point cloud...")
-		clusters, labels = cluster_pointcloud( point_cloud, eps=EPS, min_points=MIN_POINTS )
+		# clusters, labels = cluster_pointcloud( point_cloud, eps=EPS, min_points=MIN_POINTS )
+		clusters = cluster_by_chm_peaks(
+			point_cloud, 
+			peak_coords, 
+			crown_radius=MAX_RADIUS, 
+			min_points=MIN_POINTS
+			)
 		print("Point cloud clustered.")
 		print()
 
@@ -242,25 +303,36 @@ def main():
 
 		print()
 		
+
+
 	# split the clusters if desired, 
 	# no else statement needed here, not too time consuming
+	# DOES NOT GET SAVED TO DISK
 	if STEPS['Split_clusters']:
+
 		# split clusters into smaller if too large
 		print("Splitting clusters...")
-		clusters = split_large_clusters(clusters, min_points=MIN_POINTS, max_radius=MAX_RADIUS)
+		clusters = split_large_clusters(clusters, 
+			min_points=MIN_POINTS, 
+			max_radius=MAX_RADIUS, 
+			min_peak_distance=MIN_PEAK_DISTANCE,
+			k=K,
+			min_density_ratio=MIN_DENSITY_RATIO
+			)
 		print("Clusters split.")
 		print()
 
 		# filter out non-tree clusters  <-- add here
 		print("Filtering clusters...")
+		before = len(clusters)
 		clusters = [c for c in clusters if filter_cluster(c, min_height=1.0, min_radius=0.3)]
-		print(f"{len(clusters)} clusters remaining after filter.")
+		print(f"Filtered {before - len(clusters)} non-tree clusters, {len(clusters)} remaining")
 		print()
 
 
 	# get the cluster df
 	print("Making cluster df...")
-	df_clusters = clusters_to_dataframe( clusters )
+	df_clusters = clusters_to_dataframe( clusters, k=K )
 	print("Cluster df made.")
 	print()
 
@@ -276,11 +348,10 @@ def main():
 		PATHS['Labels'], 
 		df_clusters, 
 		max_distance=MAX_DISTANCE,
-		eps=EPS,
-		max_radius=MAX_RADIUS,
-		min_points=MIN_POINTS,
-		green_threshold=GREEN_THRESHOLD
-		 )
+		graph_save_path = PATHS['Images'],
+		job_id=JOB_ID,
+		graph_subtitle=f"EPS:{EPS}-MR:{MAX_RADIUS}-GT:{GREEN_THRESHOLD}-MPts:{MIN_POINTS}-MD:{MAX_DISTANCE}-K:{K}-MPD:{MIN_PEAK_DISTANCE}"
+		)
 	print("Labels assigned.")
 	print()
 	
@@ -289,15 +360,18 @@ def main():
 		
 		# what to save to the results csv
 		results = {
-			"eps":             EPS,
-			"green_threshold": GREEN_THRESHOLD,
-			"max_radius":      MAX_RADIUS,
-			"max_distance":	   MAX_DISTANCE,
-			"min_points":	   MIN_POINTS,
-			"voxel_size":	   VOXEL_SIZE,
-			"matching_score":  score,
+			"eps":               EPS,
+			"green_threshold":   GREEN_THRESHOLD,
+			"max_radius":        MAX_RADIUS,
+			"max_distance":	     MAX_DISTANCE,
+			"min_points":	     MIN_POINTS,
+			"voxel_size":	     VOXEL_SIZE,
+			"min_peak_distance": MIN_PEAK_DISTANCE,
+			"k":			     K,
+
 			"Split_clusters":  STEPS['Split_clusters'],
 			"normalize_heights":NORMALIZE_HEIGHTS,
+			"matching_score":  score,
 		}
 
 		# append to shared CSV safely

@@ -1,55 +1,70 @@
+# the trial name
+TRIAL_NAME = 'Sunset_sfm_trial'
+
+# the path of trial dir
+TRIAL_DIR = '/home/hcr64/Pinyon-Detection/trial_data/{}/'.format( TRIAL_NAME )
+
 # various paths that get accessed in the main function
 PATHS = {
     # the data folder address with .las files
-    'Data':'/home/hcr64/mydata/{}/point_cloud/',
+    'Data': TRIAL_DIR + 'data/point_cloud/',
 
     # where the complete unprocessed pointcloud and processed pointclouds are
-    'Pointclouds':'/home/hcr64/Pinyon-Detection/pointclouds/{}/',
+    'Pointclouds': TRIAL_DIR + 'pointclouds/',
+
+    # where to save/load the raw complete pointcloud from
+    'Raw_pcd':TRIAL_DIR + 'pointclouds/raw_pcd.ply',
+    'Cleaned_pcd':TRIAL_DIR + 'pointclouds/cleaned_pcd.ply',
+
+    # where to save/load the canopy height model from
+    'CHM': TRIAL_DIR + 'CFMs/chm.tif',
 
     # Where the CSV of labels path is
-    'Labels':'/home/hcr64/Pinyon-Detection/sunset-sfm.csv',
+    'Labels':TRIAL_DIR + 'labels/sunset-sfm.csv',
 
-    # The log of variable changes
-    'GPS_results':"/home/hcr64/Pinyon-Detection/results/results_minp.csv",
+    # where to save images
+    'Images': TRIAL_DIR + 'images/',
+
+    # Where to log parameters & gps / label matching scores
+    'GPS_results':TRIAL_DIR + "results/newest_results.csv",
 
     # folder path for the cluster save
-    'Clusters':'/home/hcr64/Pinyon-Detection/clusters/{}/'
-
+    'Clusters':TRIAL_DIR + 'clusters/'
 }
-
-# the larger the number, the less inclusive to greenish points
-# GREEN_THRESHOLD = 0.03
 
 # if we want to downsize or not
 DOWNSIZE = True
-
-# when downsizing, voxel size
-VOXEL_SIZE = 0.10
-
-# for splitting larger clusters into smaller ones
-# MAX_RADIUS = 3.5
-
-# for assigning labels (2-5)
-MAX_DISTANCE = 2.7
 
 # to get more printed messages
 SILENT = True
 
 # for doing/skipping sections of the main function
 STEPS = {
+    # If you want to load the entire 'raw' pointcloud.
+    # once it has been done & saved, does not need to be doen again.
+    # Takes more than 10 minutes if true usually
     'Load_Pointcloud':False,
+
+    # making the canopy from height model with the unprocesses pcd
+    # once done and saved, does not need to be ran again
+    # takes less than 2 minutes 
+    'Make_CHM':True,
 
     # if the large pointcloud needs to be cleaned again
     # very time consuming, more than 10 minutes
-    'Clean_Pointcloud':True,
+    'Clean_Pointcloud':False,
 
     # if the clusters should be created again
     # a little time consuming, usually at least 3 minutes or so
     'Make_Clusters':True,
 
+    # if clusters need to be split or not
+    # not too time consuming
+    'Split_clusters':False,
+
     # Evaluate the GPS points to cluster accuracy 
     # A few seconds at most
-    'Cluster_accuracy':False,
+    'Cluster_accuracy':True,
     
     # if a model should be trained
     # not very time consuming, usually a few seconds or less

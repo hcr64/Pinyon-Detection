@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=pinyon_main                        # the name of your job
-#SBATCH --output=/scratch/hcr64/pinyon_output.txt      # this is the file your $
-#SBATCH --error=/scratch/hcr64/pinyon_output.err
+#SBATCH --output=/scratch/hcr64/%j.txt      # this is the file your $
+#SBATCH --error=/scratch/hcr64/%j.err
 #SBATCH --chdir=/home/hcr64/Pinyon-Detection                  # your work directory
-#SBATCH --time=40:00                            # (max time) 40 min (shorte$
-#SBATCH --mem=100G                              # (total mem) 100GB of memory
+#SBATCH --time=1:00:00                            # (max time) 1 hr (shorte$
+#SBATCH --mem=126G                              # (total mem) 100GB of memory
 
 # get in the open3d environment
 # source open3d_env/bin/activate
@@ -26,19 +26,23 @@ EPS=2.0
 # green threshold, as it increases more points allowed
 # the higher it is, the more exclusive.
 # It is the minimum gap between greenness and other colors in a point.
-GREEN=0.025
+GREEN=0.015
 
 # for splitting large clusters, clusters with radii larger get split
 RADIUS=4.0
 
 # maximum distance for assigning labels to clusters
-MAX_DISTANCE=2.85
+MAX_DISTANCE=2.5
 
 # minimum points per cluster
-MIN_POINTS=40
+MIN_POINTS=350
 
 # voxel size when downsizing
 VOXEL_SIZE=0.08
+
+MIN_PEAK_DISTNCE=3.0
+
+K=100
 
 # run the main function
 python -u main.py \
@@ -48,4 +52,7 @@ python -u main.py \
     --max_distance $MAX_DISTANCE \
     --min_points $MIN_POINTS \
     --voxel_size $VOXEL_SIZE \
-    --trial_name $TRIAL_NAME > /scratch/hcr64/pinyon_output.txt
+    --min_peak_distance $MIN_PEAK_DISTNCE \
+    --k $K \
+    --job_id $SLURM_JOB_ID \
+    --trial_name $TRIAL_NAME 

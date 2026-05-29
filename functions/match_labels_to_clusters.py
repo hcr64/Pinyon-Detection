@@ -5,9 +5,11 @@ import os
 
 from pyproj import Transformer
 from scipy.spatial import KDTree
+from scipy.optimize import linear_sum_assignment
 
-def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.0, eps=2.0,
-    max_radius=2.0, green_threshold=0.03, min_points=50, graph_save_path="/home/hcr64/Pinyon-Detection/images/"):
+
+def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.0, job_id="",
+                            graph_subtitle="No Title", graph_save_path="/home/hcr64/Pinyon-Detection/images/"):
     """ 
     Desc:
         Creates a .csv/spreadsheet of advanced metrics on clusters to train models on. Takes a folder path with all the clusters. 
@@ -18,7 +20,6 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
         utm_zone, int: For coordinate translation.
         max_distance, int: Maximum distance a cluster can be from a label to assign it. In meters, usually not more than 3.0.
         graph_save_path, str: where to save the graph of clusters and GPS labels.
-        eps & max_distance, dbl: Not used for any calculations, just to include on graphs for reference.
 
     Returns:
         df_clusters: The simple df returned from clusters_to_dataframe, with added columns for labeled tree type.
@@ -28,6 +29,9 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
     """
 
     df_labels = pd.read_csv(csv_path)
+
+    # the graph title
+    graph_title = f"GPS_Clusters_{job_id}"
 
     # filter labels
     df_labels = df_labels[~df_labels["Name"].str.lower().str.contains("dead", na=False)]
@@ -50,7 +54,12 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
     cluster_coords = np.array(list(zip(df_clusters["x_pos"], df_clusters["y_pos"])))
 
     # get a graph of points with too many/none clusters 
-    plot_gps_cluster_overlap(csv_coords, cluster_coords, df_labels, max_distance=max_distance)
+    plot_gps_cluster_overlap(csv_coords, 
+        cluster_coords, 
+        df_labels, 
+        max_distance=max_distance, 
+        save_path=graph_save_path
+        )
 
     # calculate the score
     score = calculate_matching_score(
@@ -69,16 +78,14 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
 
     print("Num Graph Points:", len(csv_coords) )
 
-    # generate a title for the graph
-    graph_title = f"EPS:{eps}-MR:{max_radius}-GT:{green_threshold}-MPts:{min_points}-MD:{max_distance}"
-
     # make the plot of GPS coords and clsuter locations
     plt.scatter(cluster_coords[:,0], cluster_coords[:,1], c="green", label="clusters", s=1, alpha=0.3)
     plt.legend()
     plt.xlabel("Easting")
     plt.ylabel("Northing")
 
-    plt.title(graph_title)
+    plt.title( graph_title )
+    plt.suptitle( graph_subtitle )
 
     # if the path does not exist,
     if not os.path.exists( graph_save_path ):
@@ -89,13 +96,28 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
     plt.savefig(graph_save_path + graph_title + ".png")
     print(f"Saved {graph_title}.png")
 
-    # match labels to clusters
-    tree = KDTree(csv_coords)
-    distances, indices = tree.query(cluster_coords)
 
-    df_clusters["Name"]           = df_labels["Name"].iloc[indices].values
-    df_clusters["label_distance"] = distances
-    df_clusters.loc[df_clusters["label_distance"] > max_distance, "Name"] = "unknown"
+
+    # NEW - one-to-one optimal assignment
+
+    # build cost matrix (distances between every GPS point and every cluster)
+    cost_matrix = np.zeros((len(csv_coords), len(cluster_coords)))
+    for i, gps in enumerate(csv_coords):
+        for j, clust in enumerate(cluster_coords):
+            cost_matrix[i, j] = np.linalg.norm(gps - clust)
+
+    # optimal one-to-one assignment
+    gps_idx, cluster_idx = linear_sum_assignment(cost_matrix)
+
+    # default everything to unknown
+    df_clusters["Name"] = "unknown"
+    df_clusters["label_distance"] = np.inf
+
+    # only keep assignments within max_distance
+    for g, c in zip(gps_idx, cluster_idx):
+        if cost_matrix[g, c] <= max_distance:
+            df_clusters.loc[c, "Name"] = df_labels["Name"].iloc[g]
+            df_clusters.loc[c, "label_distance"] = cost_matrix[g, c]
 
     return df_clusters, score
 
@@ -191,9 +213,10 @@ def plot_gps_cluster_overlap(csv_coords, cluster_coords, df_labels, max_distance
     ax.set_ylabel("Northing")
     ax.set_title(f"GPS Points vs Clusters (max_distance={max_distance}m)\n"
                  f"Perfect: {len(perfect)}  |  No match: {len(no_match)}  |  Multiple: {len(multi)}")
+
     ax.legend()
 
     plt.tight_layout()
-    plt.savefig(save_path, dpi=150)
+    plt.savefig(save_path + "coordinate_overlap.png", dpi=150)
     plt.close()
     print(f"Saved plot to {save_path}")

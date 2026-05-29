@@ -7,7 +7,7 @@ from scipy.spatial import KDTree
 
 
 # a function to put all the pinyon stats into a df
-def clusters_to_dataframe( clusters ):
+def clusters_to_dataframe( clusters, k=50 ):
     """ 
     Desc:
         Creates a .csv/spreadsheet of generic metrics on clusters to make some graphs. Takes a folder path with all the clusters.
@@ -24,7 +24,7 @@ def clusters_to_dataframe( clusters ):
     rows = []      
 
     for i, cluster in enumerate(clusters):
-        stats = get_pointcloud_stats( cluster )
+        stats = get_pointcloud_stats( cluster, k=k )
         stats["file"] = i
         rows.append( stats )
 
@@ -36,7 +36,7 @@ def clusters_to_dataframe( clusters ):
     return df
 
 # a function to get stats from a pointcloud, returns array
-def get_pointcloud_stats(pcd, silent=True):
+def get_pointcloud_stats(pcd, silent=True, k=50):
     """ 
     Desc:
         Supplental function to clusters_to_dataframe. Creates a single row of cluster statistics.
@@ -70,8 +70,8 @@ def get_pointcloud_stats(pcd, silent=True):
     # center position (x, y)
     # center = aabb.get_center()
 
-    center = density_weighted_center(points)
-
+    # get the center based off all the points 
+    center = density_weighted_center(points, k=k)
     x_pos = center[0]
     y_pos = center[1]
 
@@ -100,6 +100,10 @@ def get_pointcloud_stats(pcd, silent=True):
 
 # get center values wewighted on the amount of points, to reduce impacts of grass, bushes, etc.
 def density_weighted_center(points, k=10):
+
+    # cap k so it doenst go over the clsuter size
+    k = min(k, len(points) - 1)
+
     tree = KDTree(points)
     distances, _ = tree.query(points, k=k)
     # local density = inverse of mean distance to k neighbors
