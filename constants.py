@@ -26,10 +26,13 @@ PATHS = {
     'Images': TRIAL_DIR + 'images/',
 
     # Where to log parameters & gps / label matching scores
-    'GPS_results':TRIAL_DIR + "results/newest_results.csv",
+    'GPS_results':TRIAL_DIR + "results/newester_results.csv",
 
     # folder path for the cluster save
-    'Clusters':TRIAL_DIR + 'clusters/'
+    'Clusters':TRIAL_DIR + 'clusters/',
+
+    # folder for labled clusters
+    'Labeled_clusters':TRIAL_DIR + 'labeled_clusters/'
 }
 
 # if we want to downsize or not
@@ -48,7 +51,7 @@ STEPS = {
     # making the canopy from height model with the unprocesses pcd
     # once done and saved, does not need to be ran again
     # takes less than 2 minutes 
-    'Make_CHM':True,
+    'Make_CHM':False,
 
     # if the large pointcloud needs to be cleaned again
     # very time consuming, more than 10 minutes
@@ -60,7 +63,7 @@ STEPS = {
 
     # if clusters need to be split or not
     # not too time consuming
-    'Split_clusters':False,
+    'Split_clusters':True,
 
     # Evaluate the GPS points to cluster accuracy 
     # A few seconds at most
@@ -68,5 +71,5 @@ STEPS = {
     
     # if a model should be trained
     # not very time consuming, usually a few seconds or less
-    'Train_Model':False
+    'Train_Model':True
 }

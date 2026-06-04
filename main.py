@@ -36,6 +36,8 @@ def main():
 	parser.add_argument("--voxel_size", type=float, required=True)
 	parser.add_argument("--min_peak_distance", type=float, required=True)
 	parser.add_argument("--k", type=int, required=True)
+	parser.add_argument("--min_height",       type=float, required=True)
+	parser.add_argument("--search_radius_m",  type=float, required=True)
 	# parser.add_argument("--min_density_ratio", type=float, required=True)
 
 
@@ -58,8 +60,9 @@ def main():
 	K = args.k
 	MIN_DENSITY_RATIO = 1.5 # args.min_density_ratio
 
-	MIN_HEIGHT = 1.0
-	SEARCH_RADIUS_M = 2.0
+	MIN_HEIGHT       = args.min_height
+	SEARCH_RADIUS_M  = args.search_radius_m
+
 
 	# for saving/reading files off location. 
 	TRIAL_NAME		= args.trial_name
@@ -67,7 +70,7 @@ def main():
 	# for identifying what graphs come from which jobs
 	JOB_ID = args.job_id
 
-	NORMALIZE_HEIGHTS=False
+	NORMALIZE_HEIGHTS=True
 
 
 	# print general settings / command line args
@@ -128,9 +131,9 @@ def main():
 		print()
 
 
-	# load the pointcloud in from save, if will be cleaned or used in the CHM, 
-	# otherwise, the cleaned pointcloud is being read in
-	elif STEPS['Clean_Pointcloud'] or STEPS['Make_CHM']:
+	# load the pointcloud in from save, if will be cleaned or used in the CHM, or used in clustering, 
+	# otherwise, the cleaned pointcloud is being read in. Just read it in, its genrally used
+	else:
 
 		# read the saved point cloud in
 		print(f"Reading in raw pointcloud... (from {PATHS['Raw_pcd']})")
@@ -178,28 +181,27 @@ def main():
 	else:
 		# check if the path is legit
 		if os.path.exists( PATHS['CHM'] ):
-			chm = load_chm( PATHS['CHM'] )
-			print("Cleaned point cloud read in.")
+			print(f"Loading in CHM... (from { PATHS['CHM'] })")
+			chm, transform, crs = load_chm( PATHS['CHM'] )
 			
 		else:
 			# print an error message and quit
 			print(f"Cannot find CHM save path. ({ PATHS['CHM'] }) Exiting program...")
 			return 1
 
-		print(f"Loading in CHM... (from { PATHS['CHM'] })")
-
 		print('CMF loaded in successfully.')
 
-	# get the peaks from the pointcloud
-	# do either way
-	print("Finding peaks in CHM...")
-	peak_coords, peak_heights = find_chm_peaks(
-		chm, 
-		transform, 
-		min_height=MIN_HEIGHT, 
-		search_radius_m=SEARCH_RADIUS_M)
-	print()
-
+	# only do this if clustering the pointcloud after, otherwise there is no point and it wastes time
+	if STEPS['Make_Clusters']:
+		# get the peaks from the pointcloud
+		# do either way
+		print("Finding peaks in CHM...")
+		peak_coords, peak_heights = find_chm_peaks(
+			chm, 
+			transform, 
+			min_height=MIN_HEIGHT, 
+			search_radius_m=SEARCH_RADIUS_M)
+		print()
 
 
 	# 'Clean' the read in point cloud, doesn't take too long. 
@@ -240,9 +242,10 @@ def main():
 		print("Cleaned pointcloud saved.")
 		print()
 
+
 	# since the pointcloud is not being processed, load it in instead.
 	# only do so if the clusters will be made. Otherwise the cleaned pcd will not be used
-	elif STEPS['Make_Clusters']:
+	elif STEPS['Make_Clusters'] and False:
 		
 		# read the saved point cloud in
 		print(f"Reading in cleaned pointcloud... (from { PATHS['Cleaned_pcd'] })")
@@ -261,6 +264,12 @@ def main():
 		print()
 
 
+	# if none of these cases hit, print message saying the pointcloud will not be cleaned
+	else:
+		print("Unprocessed pointcloud being used. Pointcloud is not being 'cleaned.'")
+		print()
+
+
 
 	# cluster the 'cleaned' pointcloud into tree clusters.
 	# Sometimes unecesary if clusters are already saved. Also can take ~3 minutues to run, so can be worth it to skip.
@@ -270,39 +279,56 @@ def main():
 		print("Clustering point cloud...")
 		# clusters, labels = cluster_pointcloud( point_cloud, eps=EPS, min_points=MIN_POINTS )
 		clusters = cluster_by_chm_peaks(
-			point_cloud, 
-			peak_coords, 
-			crown_radius=MAX_RADIUS, 
+			point_cloud,
+			peak_coords,
+			chm=chm,           # ← new
+			transform=transform, # ← new
+			crown_radius=MAX_RADIUS,
 			min_points=MIN_POINTS
-			)
+		)
 		print("Point cloud clustered.")
 		print()
 
+		# after clustering, filter points by height above ground
+		MIN_POINT_HEIGHT = 1.5  # metres above local ground
+		clusters = [
+			c for c in clusters 
+			if np.asarray(c.points)[:, 2].max() - np.asarray(c.points)[:, 2].min() > MIN_POINT_HEIGHT
+		]
+
 		# save the clusters in the clusters folder
 		print("Saving clusters...")
-		save_clusters( clusters, PATHS['Clusters'].format( TRIAL_NAME ) )
+		save_clusters( clusters, PATHS['Clusters'] )
 		print("Clusters saved.")
 		print()
 	
 	# If clusters will not be computed, try to load them in instead
 	else:
 		# Print message that clusters are beaing loaded 
-		print(f"Reading in clusters... (from {PATHS['Clusters'].format( TRIAL_NAME )})")
+		print(f"Reading in clusters... (from {PATHS['Clusters']})")
 
 		# make sure the path exists first
-		if os.path.exists( PATHS['Clusters'].format( TRIAL_NAME ) ):
+		if os.path.exists( PATHS['Clusters'] ):
 			# if it does, load them in
-			clusters = load_clusters( PATHS['Clusters'].format( TRIAL_NAME ) )
+			clusters = load_clusters( PATHS['Clusters'] )
 			print("Clusters read in.")
 		
 		# if it doesnt exist
 		else:
 			# print error message and quit the program
-			print(f"Could not find clusters save path ({PATHS['Clusters'].format( TRIAL_NAME )}). Exiting program...")
+			print(f"Could not find clusters save path ({PATHS['Clusters']}). Exiting program...")
 			return 1
 
 		print()
-		
+	
+
+	# only do this if the pointcloud is NOT being 'cleaned' first, 
+	if not STEPS['Clean_Pointcloud']:
+		# get rid of the floor of the clusters
+		print("Stripping ground from clusters...")
+		clusters = strip_ground_from_clusters(clusters, ground_percentile=10, min_height_above_ground=0.5)
+		print("Ground stripped.")
+
 
 
 	# split the clusters if desired, 
@@ -345,14 +371,25 @@ def main():
 	# assign lables to clusters
 	print("Assigning labels to clusters...")
 	df_clusters, score = match_labels_to_clusters( 
-		PATHS['Labels'], 
+		PATHS['Labels'],
 		df_clusters, 
+		csv_path_2=os.path.dirname( PATHS['Labels'] ) + '/sunsetCraterMay26.csv', 
 		max_distance=MAX_DISTANCE,
 		graph_save_path = PATHS['Images'],
 		job_id=JOB_ID,
 		graph_subtitle=f"EPS:{EPS}-MR:{MAX_RADIUS}-GT:{GREEN_THRESHOLD}-MPts:{MIN_POINTS}-MD:{MAX_DISTANCE}-K:{K}-MPD:{MIN_PEAK_DISTANCE}"
 		)
 	print("Labels assigned.")
+	print()
+
+	# save the labeled clusters to a folder
+	print("saving Labeled clusters...")
+	save_labeled_clusters(
+		clusters, 
+		df_clusters, 
+		save_path=PATHS['Labeled_clusters']
+		)
+	print("Labeled clusters saved.")
 	print()
 	
 	# test the accuracy of assigning GPS points to Clusters
@@ -363,15 +400,16 @@ def main():
 			"eps":               EPS,
 			"green_threshold":   GREEN_THRESHOLD,
 			"max_radius":        MAX_RADIUS,
-			"max_distance":	     MAX_DISTANCE,
-			"min_points":	     MIN_POINTS,
-			"voxel_size":	     VOXEL_SIZE,
+			"max_distance":      MAX_DISTANCE,
+			"min_points":        MIN_POINTS,
+			"voxel_size":        VOXEL_SIZE,
 			"min_peak_distance": MIN_PEAK_DISTANCE,
-			"k":			     K,
-
-			"Split_clusters":  STEPS['Split_clusters'],
-			"normalize_heights":NORMALIZE_HEIGHTS,
-			"matching_score":  score,
+			"k":                 K,
+			"min_height":        MIN_HEIGHT,        # add
+			"search_radius_m":   SEARCH_RADIUS_M,   # add
+			"Split_clusters":    STEPS['Split_clusters'],
+			"normalize_heights": NORMALIZE_HEIGHTS,
+			"matching_score":    score,
 		}
 
 		# append to shared CSV safely

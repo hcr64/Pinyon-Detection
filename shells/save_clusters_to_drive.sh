@@ -6,9 +6,12 @@
 #SBATCH --time=40:00                            # (max time) 40 min (shorte$
 #SBATCH --mem=1000
 
+# the trial name
+TRIAL_NAME=Sunset_sfm_trial
+
 # file paths
-LOCAL_CLUSTERS=/home/hcr64/Pinyon-Detection/clusters/
-DRIVE_PATH=gdrive:Sunset_Crater_trial/clusters/
+LOCAL_CLUSTERS=/home/hcr64/Pinyon-Detection/trial_data/$TRIAL_NAME/labeled_clusters/
+DRIVE_PATH=gdrive:Sunset_Crater_trial/labeled_clusters/
 
 # exit if any command fails
 set -e
