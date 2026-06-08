@@ -59,7 +59,7 @@ STEPS = {
 
     # if the clusters should be created again
     # a little time consuming, usually at least 3 minutes or so
-    'Make_Clusters':True,
+    'Make_Clusters':False,
 
     # if clusters need to be split or not
     # not too time consuming

@@ -10,19 +10,29 @@
 TRIAL_NAME=Sunset_sfm_trial
 
 # file paths
-LOCAL_CLUSTERS=/home/hcr64/Pinyon-Detection/trial_data/$TRIAL_NAME/labeled_clusters/
-DRIVE_PATH=gdrive:Sunset_Crater_trial/labeled_clusters/
+LOCAL_WD=/home/hcr64/Pinyon-Detection/
+LOCAL_PATHS=( "pre_split_clusters/" "trial_data/$TRIAL_NAME/labeled_clusters/" )
+
+# Drive locations
+DRIVE_WD=gdrive:Sunset_Crater_trial/
+DRIVE_PATHS=( "pre_split_clusters/" "clusters/" "labeled_clusters/" )
 
 # exit if any command fails
 set -e
 
-# say how many files are being deleted
-echo "Deleting $(rclone size $DRIVE_PATH) folder..."
+# iterate over all the paths
+for index in "${!LOCAL_PATHS[@]}"; do
 
-# clear the folder before cloning
-rclone delete $DRIVE_PATH
+    # get the local and drive paths
+    LOCAL_PATH="$LOCAL_WD${LOCAL_PATHS[$index]}"
+    DRIVE_PATH="$DRIVE_WD${DRIVE_PATHS[$index]}"
 
-echo "Saving $(du -sh "$LOCAL_CLUSTERS" | cut -f1) clusters to $FILE_PATH..."
+    # clear the drive folder
+    echo "Deleting $(rclone size $DRIVE_PATH) folder..."
+    rclone delete $DRIVE_PATH
 
-# copy the folder to the drive
-rclone copy $LOCAL_CLUSTERS $DRIVE_PATH
+    # save the local folder to drive
+    echo "Saving $(du -sh "$LOCAL_PATH" | cut -f1) to $DRIVE_PATH..."
+    rclone copy $LOCAL_PATH $DRIVE_PATH
+
+done

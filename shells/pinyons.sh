@@ -17,13 +17,13 @@ EPS=2.0
 GREEN=0.025
 
 # maximum crown radius in metres for cluster_by_chm_peaks
-RADIUS=2.5
+RADIUS=3.0
 
 # maximum GPS-to-cluster distance for label matching
-MAX_DISTANCE=6.0
+MAX_DISTANCE=4.0
 
 # minimum points per cluster — may need to increase now that clusters include all points, not just green
-MIN_POINTS=100
+MIN_POINTS=200
 
 # voxel downsampling size — 0.05/0.06/0.08 all scored the same, 0.08 is fastest
 VOXEL_SIZE=0.08

@@ -3,6 +3,8 @@ import open3d as o3d
 from scipy.spatial import KDTree
 from sklearn.cluster import MeanShift, estimate_bandwidth
 
+from functions.save_clusters import save_clusters
+
 
 def filter_cluster(pcd, min_height=1.0, min_radius=0.3):
     """
@@ -26,7 +28,7 @@ def filter_cluster(pcd, min_height=1.0, min_radius=0.3):
 
 def split_large_clusters(clusters, min_points=10, max_radius=2.0,
                          min_peak_distance=3.0, k=50, min_density_ratio=1.5,
-                         save_pre_split_path="/pre_split_clusters/"):
+                         save_pre_split_path="pre_split_clusters/"):
     """
     Desc:
         Splits large clusters that likely contain multiple trees using Mean Shift
@@ -79,7 +81,7 @@ def split_large_clusters(clusters, min_points=10, max_radius=2.0,
     """
 
     final_clusters = []
-    pre_split_clusters = []  # clusters that are valid candidates for splitting
+    pre_split_clusters = []
 
     for pcd in clusters:
         points = np.asarray(pcd.points)
@@ -89,8 +91,8 @@ def split_large_clusters(clusters, min_points=10, max_radius=2.0,
             continue
 
         # gate 2: only consider splitting if the cluster is actually large
-        aabb = pcd.get_axis_aligned_bounding_box()
-        width = max((aabb.max_bound - aabb.min_bound)[:2])
+        aabb   = pcd.get_axis_aligned_bounding_box()
+        width  = max((aabb.max_bound - aabb.min_bound)[:2])
         radius = width / 2
 
         if radius <= max_radius:
@@ -98,22 +100,118 @@ def split_large_clusters(clusters, min_points=10, max_radius=2.0,
             continue
 
         # only reach here if the cluster is genuinely large
+        # check for multiple density peaks before attempting a split
         peaks, _ = find_density_peaks(
             points,
-            k=k,
+            k=min(k, len(points) - 1),
             min_peak_distance=min_peak_distance,
             min_density_ratio=min_density_ratio
         )
-        n_trees = len(peaks)
+        n_peaks = len(peaks)
+
+        if n_peaks < 2:
+            # wide cluster but only one density core — still just one tree
+            final_clusters.append(pcd)
+            continue
+
+        print(f"Found {n_peaks} density peaks in cluster (radius={radius:.2f}m), attempting Mean Shift split...")
+
+        # ── only reach here if the cluster is genuinely large ─────────────────
+
+        # Mean Shift on XY only — we care about horizontal crown separation,
+        # not vertical height variation
+        xy = points[:, :2]
+
+        # subsample for bandwidth estimation if the cluster is huge
+        # (estimate_bandwidth is O(n^2) so cap at 2000 points)
+        sample_size = min(len(xy), 2000)
+        rng         = np.random.default_rng(42)
+        sample_xy   = xy[rng.choice(len(xy), sample_size, replace=False)]
+
+        # bandwidth = min_peak_distance lets you control "how far apart must
+        # two crowns be to be counted separately" directly
+        # if you'd rather let sklearn estimate it from data density, uncomment:
+        # bandwidth = estimate_bandwidth(sample_xy, quantile=0.15)
+        bandwidth = min_peak_distance
+
+        ms = MeanShift(bandwidth=bandwidth, bin_seeding=True, min_bin_freq=5)
+        ms.fit(xy)
+
+        sub_labels  = ms.labels_
+        n_trees     = len(np.unique(sub_labels))
 
         if n_trees < 2:
+            # Mean Shift found only one mode — still just one tree
             final_clusters.append(pcd)
             continue
 
         # this cluster is a valid split candidate — record it
         pre_split_clusters.append(pcd)
 
-        print(f"Splitting cluster (radius={radius:.2f}m) into {n_trees} trees")
+        print(f"Mean Shift split cluster (radius={radius:.2f}m) into {n_trees} sub-clusters")
 
-        # seed KMeans with actual peak locations
-        peak_coords = points[peaks]
+        # ── validate each sub-cluster before accepting the split ───────────────
+        valid_subs = []
+        for i in np.unique(sub_labels):
+            mask    = sub_labels == i
+            sub_pcd = pcd.select_by_index(np.where(mask)[0])
+            if (len(sub_pcd.points) >= min_points and
+                    filter_cluster(sub_pcd, min_height=1.0, min_radius=0.3)):
+                valid_subs.append(sub_pcd)
+
+        # keep whatever valid sub-clusters came out, even if only one survives
+        if len(valid_subs) >= 1:
+            discarded = n_trees - len(valid_subs)
+            if discarded > 0:
+                print(f"  Discarded {discarded} sub-clusters that failed validation")
+            final_clusters.extend(valid_subs)
+        else:
+            # nothing survived validation at all — keep the original
+            print(f"  Split rejected — no sub-clusters passed validation, keeping original")
+            final_clusters.append(pcd)
+
+    # save pre-split clusters locally if a path was given
+    if save_pre_split_path is not None:
+        save_clusters(pre_split_clusters, save_pre_split_path)
+        print(f"Saved {len(pre_split_clusters)} pre-split clusters to {save_pre_split_path}")
+
+    print(f"Clusters before splitting: {len(clusters)}")
+    print(f"Clusters after splitting:  {len(final_clusters)}")
+    return final_clusters
+
+
+
+def find_density_peaks(points, k=30, min_peak_distance=3.0, min_density_ratio=2.5):
+    """
+    Find local density peaks in a point cloud.
+    Each peak likely corresponds to a separate tree trunk/canopy core.
+    """
+
+    # cap k to avoid index errors on small clusters
+    k = min(k, len(points) - 1)
+
+    tree = KDTree(points)
+    distances, neighbor_indices = tree.query(points, k=k)
+    density = 1.0 / (distances[:, 1:].mean(axis=1) + 1e-6)
+
+    mean_density = density.mean()
+
+    # a point is a peak if it has higher density than all its k neighbors
+    # AND is meaningfully denser than the cluster average
+    peaks = []
+    for i, neighbors in enumerate(neighbor_indices):
+        if (density[i] == density[neighbors].max() and
+                density[i] > mean_density * min_density_ratio):
+            peaks.append(i)
+
+    # filter out peaks that are too close together — likely the same tree
+    filtered_peaks = []
+    for i in peaks:
+        too_close = any(
+            np.linalg.norm(points[i] - points[j]) < min_peak_distance
+            for j in filtered_peaks
+        )
+        if not too_close:
+            filtered_peaks.append(i)
+
+    return filtered_peaks, density
