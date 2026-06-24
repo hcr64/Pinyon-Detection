@@ -69,16 +69,24 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
     cluster_coords = np.array(list(zip(df_clusters["x_pos"], df_clusters["y_pos"])))
 
 
-    # ── drop GPS labels that fall outside the point cloud bounding box ────────────
-    padding = 5  # metres
-    in_bounds = (
-        (csv_coords[:, 0] >= cluster_coords[:, 0].min() - padding) &
-        (csv_coords[:, 0] <= cluster_coords[:, 0].max() + padding) &
-        (csv_coords[:, 1] >= cluster_coords[:, 1].min() - padding) &
-        (csv_coords[:, 1] <= cluster_coords[:, 1].max() + padding)
-    )
-    df_labels    = df_labels[in_bounds].reset_index(drop=True)
-    csv_coords   = csv_coords[in_bounds]
+    # ── drop GPS labels that fall outside the scanned area ───────────────────────
+    # Instead of a rectangular bounding box, keep only labels that have at least
+    # one cluster within coverage_radius metres. This traces the actual scan
+    # footprint regardless of whether it's rectangular, irregular, or on a slope.
+    coverage_radius = 10.0  # metres — tune up if labels on the scan edge get dropped
+
+    cluster_tree = KDTree(cluster_coords)
+    distances_to_nearest, _ = cluster_tree.query(csv_coords)
+
+    in_coverage = distances_to_nearest <= coverage_radius
+
+    n_dropped = (~in_coverage).sum()
+    if n_dropped > 0:
+        print(f"Coverage filter: dropped {n_dropped} GPS labels with no cluster "
+            f"within {coverage_radius}m (were outside scan area)")
+
+    df_labels  = df_labels[in_coverage].reset_index(drop=True)
+    csv_coords = csv_coords[in_coverage]
 
 
 
