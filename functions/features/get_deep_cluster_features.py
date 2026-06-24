@@ -5,17 +5,22 @@ import os
 
 
 def make_deep_dataframe( clusters ):
-    """ 
-    Desc:
-        Creates a .csv/spreadsheet of advanced metrics on clusters to train models on. Takes a folder path with all the clusters.
+    """
+    Build a DataFrame of shape, PCA, and colour features from a cluster list.
+ 
+    Each row corresponds to one cluster. The "file" column stores the integer
+    index so rows can be joined to df_clusters after label matching. This
+    DataFrame is used as the feature matrix for train_tree_classifier().
+ 
     Args:
-        clusters, list of pcd: A list with clusters (pointclouds) in it. Stats are gathered from these pcds.
-
+        clusters (list of o3d.geometry.PointCloud): Clusters to featurise.
+ 
     Returns:
-        df_deep: A Pandas dataframe with info on all clusters in the list.
-        
+        pd.DataFrame: One row per cluster with columns produced by
+            get_deep_cluster_features() plus a "file" index column.
+ 
     Requirements:
-        numpy, pandas, open3d, os, make_deep_dataframe
+        numpy, pandas, open3d
     """
 
     # build dataframe from clusters
@@ -33,17 +38,39 @@ def make_deep_dataframe( clusters ):
 
 # support function
 def get_deep_cluster_features(pcd):
-    """ 
-    Desc:
-        Supplemental function to make_deep_dataframe. Creates an dict of stats for a single cluster. Will be a row in the final csv.
+    """
+    Extract shape, PCA, and colour features from a single cluster.
+ 
+    Used internally by make_deep_dataframe(). Features are chosen to
+    discriminate between pinyon, juniper, and ponderosa pine based on crown
+    geometry and colour:
+ 
+    Shape features:
+        height       — Z range of the axis-aligned bounding box
+        radius       — max XY half-width of the AABB
+        n_points     — total point count
+        obb_extent_* — oriented bounding box dimensions (x, y, z);
+                       rotation-aware so they capture true crown shape
+                       regardless of scan orientation
+ 
+    PCA features (eigenvalues of the 3×3 covariance matrix):
+        eigenvalue_1/2/3 — raw eigenvalues (descending order)
+        linearity        — (λ1 − λ2) / λ1  — how rod-like the cluster is
+        planarity        — (λ2 − λ3) / λ1  — how flat/disc-like
+        sphericity       — λ3 / λ1          — how spherical / isotropic
+ 
+    Colour features (normalised RGB, 0.0–1.0):
+        mean_r/g/b  — average colour per channel
+        std_r/g/b   — colour variation per channel
+ 
     Args:
-        pcd, Open3D pointcloud: A single cluster from the list (open3D object).
-
+        pcd (o3d.geometry.PointCloud): A single cluster with colour data.
+ 
     Returns:
-        features: Array of features on the given cluster.
-        
+        dict: Feature name → scalar value for all features listed above.
+ 
     Requirements:
-        numpy, pandas, open3d, os
+        numpy, open3d
     """
 
     points = np.asarray(pcd.points)

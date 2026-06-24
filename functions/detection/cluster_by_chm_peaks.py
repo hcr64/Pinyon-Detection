@@ -8,41 +8,46 @@ import rasterio.transform
 
 def cluster_by_chm_peaks(point_cloud, peak_coords, chm, transform, crown_radius=2.0, min_points=40):
     """
-    Desc:
-        Clusters a point cloud using marker-controlled watershed segmentation on the CHM,
-        then assigns 3D points to their corresponding watershed region. This replaces the
-        simpler radius-based nearest-peak assignment, and better respects actual crown
-        shape — concave crowns, adjacent touching crowns, and irregular canopy edges are
-        all handled more accurately.
-
-        Watershed treats the inverted CHM as a topographic surface and "floods" uphill
-        from each labeled peak (marker), stopping at ridgelines between crowns. Each
-        flooded basin becomes one tree's crown footprint, which is then used to assign
-        3D points from the point cloud.
-
+    Segment a point cloud into individual tree clusters using CHM watershed.
+ 
+    Uses marker-controlled watershed segmentation on the CHM to define each
+    tree's crown footprint, then assigns 3D points from the point cloud to
+    their corresponding watershed region. Watershed respects the natural
+    ridgeline between adjacent crowns and handles non-circular or concave
+    canopies more accurately than radius-based nearest-peak assignment.
+ 
+    Each CHM peak from find_chm_peaks() becomes one watershed marker (seed).
+    The CHM is inverted before flooding so that high-canopy cells become deep
+    basins. A hard crown_radius cap is applied after watershed to prevent
+    runaway flooding into open ground.
+ 
+    Steps:
+        1. Convert peak UTM coords to raster pixel indices
+        2. Build marker image (one integer label per peak)
+        3. Dilate markers with a 3×3 footprint for robust seeding
+        4. Run watershed on the inverted CHM with a vegetation-height mask
+        5. Map each 3D point's XY to its raster label
+        6. Zero out labels for points further than crown_radius from any peak
+        7. Build one PointCloud per label; discard clusters below min_points
+ 
     Args:
-        point_cloud, o3d.PointCloud:
-            The cleaned/green-filtered point cloud.
-        peak_coords, np.ndarray:
-            (N, 2) UTM XY coordinates from find_chm_peaks(). Each peak becomes
-            one watershed marker (seed).
-        chm, np.ndarray:
-            2D float32 CHM array from build_chm(). Used as the watershed surface.
-        transform, Affine:
-            Rasterio affine transform from build_chm(). Used to convert between
-            pixel indices and UTM coordinates.
-        crown_radius, float:
-            Maximum XY distance (metres) a point can be from its nearest peak
-            to be included at all. Acts as a hard outer bound on top of whatever
-            the watershed assigns, preventing runaway flooding into open ground.
-            Default 2.0 m.
-        min_points, int:
-            Minimum points a cluster must have to be kept. Default 40.
-
+        point_cloud (o3d.geometry.PointCloud): Green-filtered point cloud
+            from clean_up_pointcloud().
+        peak_coords (np.ndarray): (N, 2) UTM XY peak coordinates from
+            find_chm_peaks(). Each peak becomes one watershed seed.
+        chm (np.ndarray): 2-D float32 CHM array from build_chm().
+        transform (rasterio.transform.Affine): Rasterio affine transform
+            from build_chm().
+        crown_radius (float): Hard maximum distance in metres from a point
+            to its nearest peak. Points beyond this are unassigned regardless
+            of watershed label. Default 2.0.
+        min_points (int): Minimum points for a cluster to be kept.
+            Default 40.
+ 
     Returns:
-        clusters, list of o3d.PointCloud:
-            One cluster per surviving watershed region.
-
+        list of o3d.geometry.PointCloud: One cluster per surviving watershed
+            region, in peak-index order.
+ 
     Requirements:
         numpy, open3d, scipy.spatial.KDTree, skimage.segmentation,
         skimage.morphology, rasterio.transform

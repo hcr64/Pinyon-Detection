@@ -2,20 +2,30 @@ import open3d as o3d
 import numpy as np
  
 def clean_up_pointcloud(point_cloud, green_threshold=0.01):
-    """ 
-    Desc:
-        Strips a given pointcloud of all non-green points. Returns stripped pcd as open3D pcd object.
-
+    """
+    Remove non-vegetation points by filtering on green channel dominance.
+ 
+    Keeps only points where the green channel exceeds both the red and blue
+    channels by at least green_threshold. This retains live vegetation while
+    discarding bare ground, rock, and sky. Operates in normalised RGB space
+    (0.0–1.0).
+ 
     Args:
-        point_cloud, open3D pointcloud: the pointcloud to be 'stripped' down.
-        green_threshold, double: How inclusive the stripping process is. The closer to 1, the less inclusive to pixels.
-
+        point_cloud (o3d.geometry.PointCloud): Input cloud with colour data.
+            If colour is absent a warning is printed and the cloud is returned
+            unchanged.
+        green_threshold (float): Minimum margin by which green must exceed
+            both red and blue. 0.025 was found optimal at Sunset Crater;
+            values above ~0.05 begin to exclude valid vegetation. Default 0.01.
+ 
     Returns:
-        The pointcloud parameter minus all voxels that do not meet the trheshold. 
-        
+        o3d.geometry.PointCloud: Filtered cloud containing only points that
+            pass the green dominance test.
+ 
     Requirements:
         numpy, open3d
     """
+    
     if not point_cloud.has_colors():
         print("Warning: no color data, skipping green filter.")
         return point_cloud

@@ -8,17 +8,24 @@ from scipy.spatial import KDTree
 
 # a function to put all the pinyon stats into a df
 def clusters_to_dataframe( clusters, k=50 ):
-    """ 
-    Desc:
-        Creates a .csv/spreadsheet of generic metrics on clusters to make some graphs. Takes a folder path with all the clusters.
+    """
+    Build a DataFrame of geometry and position statistics from a cluster list.
+ 
+    Each row corresponds to one cluster. The "file" column stores the
+    cluster's integer index in the input list so it can be joined back to
+    df_deep_clusters and df_labels after label matching.
+ 
     Args:
-        clusters_folder, str: Folder path with all of the clusters (.ply) in it. make sure nothing else is there.
-
+        clusters (list of o3d.geometry.PointCloud): Clusters to summarise.
+        k (int): Number of neighbours used by density_weighted_center() when
+            computing the XY centroid. Default 50.
+ 
     Returns:
-        df: A Pandas dataframe with info on all clusters in the folder.
-        
+        pd.DataFrame: One row per cluster with columns: n_points, height,
+            width_x, width_y, radius, x_pos, y_pos, density, file.
+ 
     Requirements:
-        numpy, pandas, open3d, os
+        numpy, pandas, open3d, os, scipy.spatial.KDTree
     """
 
     rows = []      
@@ -37,17 +44,24 @@ def clusters_to_dataframe( clusters, k=50 ):
 
 # a function to get stats from a pointcloud, returns array
 def get_pointcloud_stats(pcd, silent=True, k=50):
-    """ 
-    Desc:
-        Supplental function to clusters_to_dataframe. Creates a single row of cluster statistics.
+    """
+    Compute geometry and position statistics for a single cluster.
+ 
+    Used internally by clusters_to_dataframe(). The XY centroid is computed
+    with density_weighted_center() rather than the AABB centre so that sparse
+    crown edges do not pull the centroid away from the trunk.
+ 
     Args:
-        pcd_path, str: location of the single cluster to read. Do not pass a cluster itself, just a location.
-
+        pcd (o3d.geometry.PointCloud): A single cluster.
+        silent (bool): Suppress per-stat print output. Default True.
+        k (int): Neighbour count for density_weighted_center(). Default 50.
+ 
     Returns:
-        stats: An array of stats for the given pointcloud. Wil luse to make final csv.
-        
+        dict: Keys: n_points, height, width_x, width_y, radius, x_pos,
+            y_pos, density.
+ 
     Requirements:
-        numpy, pandas, open3d, os
+        numpy, pandas, open3d, scipy.spatial.KDTree
     """
 
     # read the pointcloud
@@ -100,7 +114,26 @@ def get_pointcloud_stats(pcd, silent=True, k=50):
 
 # get center values wewighted on the amount of points, to reduce impacts of grass, bushes, etc.
 def density_weighted_center(points, k=10):
-
+    """
+    Compute a density-weighted centroid for a point array.
+ 
+    Weights each point by its local density (inverse mean distance to k
+    neighbours). Denser regions — such as the trunk core — pull the centre
+    more strongly than sparse crown edges. This gives a more stable XY
+    position estimate for GPS label matching than the AABB centre.
+ 
+    Args:
+        points (np.ndarray): (N, 3) XYZ array.
+        k (int): Neighbour count for local density estimation. Capped at
+            len(points) - 1. Default 10.
+ 
+    Returns:
+        np.ndarray: (3,) weighted centroid [x, y, z].
+ 
+    Requirements:
+        numpy, scipy.spatial.KDTree
+    """
+    
     # cap k so it doenst go over the clsuter size
     k = min(k, len(points) - 1)
 

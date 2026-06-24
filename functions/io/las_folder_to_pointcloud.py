@@ -6,21 +6,30 @@ import os
 
 
 def las_folder_to_pointcloud(folder_path, silent=False, downsize_pcd=True, v_size=0.05):
-    """ 
-    Desc:
-        Turn .las files into a single PointCloud object(Open3D), which is returned. Takes a folder full of .las files to create one PointCloud.
-
+    """
+    Load all .las files in a folder and merge them into a single Open3D PointCloud.
+ 
+    Reads XYZ coordinates and RGB colour (if present) from each .las file,
+    concatenates them, and optionally voxel-downsamples the combined result.
+    RGB values are normalised from 16-bit (0–65535) to float (0.0–1.0) as
+    required by Open3D.
+ 
     Args:
-        folder_path, str: A path to the local folder where the .las files are. Be sure that no files other than .las are present here.
-        siltent, bool: If true, prints more progress messages, no functional change.
-        downsize pcd, bool: If the PointCloud should be downsized or not. T = PC gets downsized, F = no downsizing.
-        v_size, double (0.01-0.1): How much the pointcloud gets downsized, in meters.
-
+        folder_path (str): Path to a folder containing only .las files.
+        silent (bool): Suppress per-file progress messages when True.
+            Default False.
+        downsize_pcd (bool): Apply voxel downsampling to the merged cloud
+            when True. Default True.
+        v_size (float): Voxel size in metres used for downsampling.
+            Typical range 0.05–0.1. Default 0.05.
+ 
     Returns:
-        A complete pointcloud made from the .las files in folder_path. It is an Opend3D pointcloud object.
-
+        o3d.geometry.PointCloud: Merged point cloud in UTM metres (EPSG:26912
+            for Sunset Crater). Colour channels are present if any input file
+            contained RGB data.
+ 
     Requirements:
-        numpy, pandas, laspy, open3d, os
+        numpy, laspy, open3d, os
     """
 
     if not silent:

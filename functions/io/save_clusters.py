@@ -2,17 +2,20 @@ import open3d as o3d
 import os
 
 def save_clusters(clusters, save_path):
-    """ 
-    Desc:
-        Saves the given array of pointcloud clusters to the given path.
-        
+    """
+    Save a list of point cloud clusters to disk as individual .ply files.
+ 
+    Clears the destination folder before writing so it always reflects the
+    current cluster list. Files are named cluster0.ply, cluster1.ply, …
+ 
     Args:
-        clusters, array of poincloud (.ply) clusters: An array of pointcloud (.ply) clusters. 
-        save_path, str: Location to save the clusters.
-
+        clusters (list of o3d.geometry.PointCloud): Clusters to save.
+        save_path (str): Directory to write .ply files into. Created
+            automatically if it does not exist.
+ 
     Returns:
-        Void
-        
+        None
+ 
     Requirements:
         open3d, os
     """
@@ -32,6 +35,20 @@ def save_clusters(clusters, save_path):
     print(f"All {len(clusters)} clusters saved to {save_path}")
 
 def load_clusters( save_path ):
+    """
+    Load all .ply cluster files from a directory into a list of PointClouds.
+ 
+    Args:
+        save_path (str): Directory containing .ply cluster files written by
+            save_clusters().
+ 
+    Returns:
+        list of o3d.geometry.PointCloud: One entry per .ply file found.
+ 
+    Requirements:
+        open3d, os
+    """
+    
     # the array of clusters to return 
     clusters = []
 

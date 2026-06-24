@@ -5,27 +5,35 @@ import rasterio.transform
 
 def find_chm_peaks(chm, transform, min_height=1.5, search_radius_m=1.5, resolution=0.5):
     """
-    Desc:
-        Find local maxima in a Canopy Height Model raster. Each peak above
-        min_height is treated as a candidate tree top. Returns UTM coordinates
-        so the peaks can be used as KMeans seeds or DBSCAN pre-filters.
-
+    Detect local maxima in a Canopy Height Model raster as candidate tree tops.
+ 
+    Applies scipy.ndimage.maximum_filter with a window sized to search_radius_m
+    and marks pixels that equal the local maximum and exceed min_height as peaks.
+    Flat-topped regions (multiple equal-valued adjacent pixels) are collapsed to
+    their centroid. Pixel indices are converted to UTM coordinates via the
+    rasterio transform.
+ 
+    Returned peak coordinates are used as watershed markers in
+    cluster_by_chm_peaks() and as Mean Shift seeds in split_large_clusters().
+ 
     Args:
-        chm, np.ndarray:        2D float32 CHM array from build_chm().
-        transform, Affine:      Rasterio affine transform from build_chm().
-        min_height, float:      Minimum canopy height (metres) to count as a
-                                tree. Filters out ground clutter. Default 1.5.
-        search_radius_m, float: Radius (metres) of the local maximum filter
-                                window. Should be roughly the minimum expected
-                                crown radius. Default 1.5 m.
-        resolution, float:      CHM cell size in metres — must match the value
-                                used in build_chm(). Default 0.5 m.
-
+        chm (np.ndarray): 2-D float32 CHM array from build_chm().
+        transform (rasterio.transform.Affine): Affine transform from build_chm().
+        min_height (float): Minimum canopy height in metres to qualify as a
+            tree. Filters out low ground clutter. 1.0 m outperformed 1.5 m
+            at Sunset Crater. Default 1.5.
+        search_radius_m (float): Radius in metres of the local maximum filter
+            window. Roughly the minimum expected crown radius — two peaks
+            closer than this will be merged. 3.0 m outperformed smaller values
+            at Sunset Crater. Default 1.5.
+        resolution (float): CHM cell size in metres. Must match the value
+            used in build_chm(). Default 0.5.
+ 
     Returns:
-        peak_coords, np.ndarray: (N, 2) array of (easting, northing) UTM
-                                 coordinates for each detected tree top.
-        peak_heights, np.ndarray: (N,) array of CHM heights at each peak.
-
+        peak_coords (np.ndarray): (N, 2) array of (easting, northing) UTM
+            coordinates for each detected tree top.
+        peak_heights (np.ndarray): (N,) array of CHM heights at each peak.
+ 
     Requirements:
         numpy, scipy.ndimage, rasterio.transform
     """
@@ -77,24 +85,27 @@ def find_chm_peaks(chm, transform, min_height=1.5, search_radius_m=1.5, resoluti
 
 def filter_clusters_by_chm_peaks(clusters, peak_coords, max_distance=3.0):
     """
-    Desc:
-        Keep only clusters that have at least one CHM peak nearby.
-        Acts as a fast pre-filter before DBSCAN or KMeans, removing
-        ground patches and shrubs that have no corresponding canopy peak.
-
+    Discard clusters that have no CHM peak nearby.
+ 
+    Compares each cluster's XY centroid against the peak coordinate set and
+    removes clusters further than max_distance from any peak. Acts as a fast
+    pre-filter to eliminate ground patches and shrubs before further processing.
+ 
     Args:
-        clusters, list of o3d.PointCloud: Clusters from cluster_pointcloud().
-        peak_coords, np.ndarray:          (N, 2) UTM peak coords from find_chm_peaks().
-        max_distance, float:              A cluster must have its XY centroid within
-                                          this many metres of a peak to be kept.
-                                          Default 3.0 m.
-
+        clusters (list of o3d.geometry.PointCloud): Clusters to filter.
+        peak_coords (np.ndarray): (N, 2) UTM peak coordinates from
+            find_chm_peaks().
+        max_distance (float): Maximum distance in metres from a cluster
+            centroid to the nearest peak. Default 3.0.
+ 
     Returns:
-        filtered, list of o3d.PointCloud: Clusters that overlap a CHM peak.
-
+        list of o3d.geometry.PointCloud: Clusters whose centroid is within
+            max_distance of at least one peak.
+ 
     Requirements:
         numpy, scipy.spatial.KDTree
     """
+    
     from scipy.spatial import KDTree
     import numpy as np
 

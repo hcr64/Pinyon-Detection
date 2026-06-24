@@ -34,36 +34,42 @@ FEATURES = [
 def train_tree_classifier(df_deep, df_labels_matched,
                           save_confusion_matrix_path=None):
     """
-    Train and compare multiple tree-species classifiers, then return the best one.
-
-    Evaluation metrics per model:
-        - Per-class precision / recall / F1 (classification report)
-        - Macro F1  — treats all species equally regardless of sample count
-        - Cohen's Kappa — accuracy corrected for chance agreement
-        - Stratified 3-fold CV accuracy and per-fold scores
-        - Confusion matrix (saved as PNG if save_confusion_matrix_path is given)
-
-    Models compared:
-        - Random Forest      (current baseline)
-        - Gradient Boosting  (usually best on small tabular data)
-        - SVM (RBF kernel)   (good with PCA / geometric features)
-        - Logistic Regression (fast sanity-check)
-        - KNN (k=5)          (geometric proximity baseline)
-
+    Train and evaluate species classifiers on labeled cluster features.
+ 
+    Merges df_deep with df_labels_matched on the "file" index column, drops
+    unlabeled and "unknown" rows, then trains multiple classifier types
+    (Gradient Boosting, SVM/RBF, Logistic Regression, KNN, and an ensemble)
+    each wrapped in a Pipeline with StandardScaler. Cross-validation uses
+    StratifiedKFold with fold count capped at min(3, min_class_size) to
+    handle small juniper and ponderosa sample sizes.
+ 
+    Class imbalance is expected — pinyon likely dominates. Raw accuracy is
+    misleading; evaluate using per-class precision/recall/F1, macro F1, and
+    Cohen's Kappa which are all reported. Confusion matrix PNGs and
+    predict_proba columns are also produced.
+ 
+    After training, the best model predicts species for *all* clusters in
+    df_deep (including unlabeled ones) and appends a "predicted_label" column.
+    In main.py the predictions are additionally filtered by confidence
+    (pinyon_confidence > 0.80) before counting confirmed detections.
+ 
     Args:
-        df_deep (pd.DataFrame):
-            Feature dataframe from make_deep_dataframe().
-        df_labels_matched (pd.DataFrame):
-            Cluster dataframe from match_labels_to_clusters(), must have
-            'file' and 'Name' columns.
-        save_confusion_matrix_path (str | None):
-            If given, saves a confusion-matrix PNG for the best model here.
-            Pass e.g. PATHS['Images'] + 'confusion_matrix.png'.
-
+        df_deep (pd.DataFrame): Feature DataFrame from make_deep_dataframe().
+            Must contain the feature columns listed below.
+        df_labels_matched (pd.DataFrame): Cluster DataFrame returned by
+            match_labels_to_clusters(). Must have "file" and "Name" columns.
+ 
     Returns:
-        best_model: Fitted sklearn estimator (or Pipeline) with the highest
-                    macro F1 on the hold-out test set.
-        features (list[str]): Feature column names used for training.
+        model: Trained best-performing classifier (sklearn Pipeline).
+        features (list of str): Feature column names used for training:
+            height, radius, n_points, obb_extent_x/y/z,
+            eigenvalue_1/2/3, linearity, planarity, sphericity,
+            mean_r/g/b, std_r/g/b.
+ 
+    Requirements:
+        sklearn.pipeline, sklearn.preprocessing, sklearn.ensemble,
+        sklearn.svm, sklearn.linear_model, sklearn.neighbors,
+        sklearn.model_selection, sklearn.metrics, pandas
     """
 
     # ── merge features with labels ────────────────────────────────────────────

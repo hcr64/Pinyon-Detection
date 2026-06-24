@@ -11,25 +11,56 @@ from scipy.optimize import linear_sum_assignment
 def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.0, job_id="",
                             graph_subtitle="No Title", graph_save_path="/home/hcr64/Pinyon-Detection/images/",
                             csv_path_2=None):
-    """ 
-    Desc:
-        Creates a .csv/spreadsheet of advanced metrics on clusters to train models on. Takes a folder path with all the clusters. 
-        Also filters through the labels csv to make labels standardized. Can also make a graph of clusters and GPS labels and saves it.
+    """
+    Match GPS species labels to detected clusters via optimal one-to-one assignment.
+ 
+    Loads GPS labels from one or two CSVs, converts coordinates from WGS84
+    lat/lon to UTM, and assigns each GPS label to its nearest cluster centroid
+    using scipy.optimize.linear_sum_assignment (the Hungarian algorithm).
+    Assignments further than max_distance metres are discarded.
+ 
+    GPS labels are normalised before matching: dead trees and survey points are
+    excluded, species names are standardised to pinyon / juniper / ponderosa,
+    and labels outside the point cloud bounding box are dropped. Rows from
+    csv_path_2 (if provided) are merged and deduplicated with the primary CSV.
+ 
+    Saves two diagnostic plots to graph_save_path:
+        coordinate_overlap.png — GPS points coloured by match quality
+            (perfect / no match / multiple clusters nearby)
+        GPS_Clusters_<job_id>.png — species scatter overlaid on all cluster
+            centroids
+ 
     Args:
-        csv_path str: The path to the primary geoLabel CSV file.
-        df_clusters, df: The simple df returned from clusters_to_dataframe.
-        utm_zone, int: For coordinate translation.
-        max_distance, int: Maximum distance a cluster can be from a label to assign it. In meters, usually not more than 3.0.
-        graph_save_path, str: Where to save the graph of clusters and GPS labels.
-        csv_path_2, str or None: Optional path to a second label CSV. Rows from both CSVs are
-                                 merged before matching. The second CSV must also have
-                                 'Name', 'Longitude', and 'Latitude' columns (same format).
-
+        csv_path (str): Path to the primary GPS label CSV. Must have columns
+            "Name", "Longitude", "Latitude".
+        df_clusters (pd.DataFrame): Cluster geometry DataFrame from
+            clusters_to_dataframe(). Must have columns "x_pos" and "y_pos"
+            (UTM, metres).
+        utm_zone (int): UTM zone for coordinate conversion. Default 12
+            (Arizona / Sunset Crater, EPSG:26912).
+        max_distance (float): Maximum GPS-to-cluster distance in metres for
+            a label assignment to be accepted. 2.85 m was found optimal in
+            parameter sweeps. Default 3.0.
+        job_id (str): Appended to the graph filename for traceability across
+            SLURM sweep runs. Default "".
+        graph_subtitle (str): Subtitle shown on the species scatter plot,
+            typically a summary of the current parameter set. Default
+            "No Title".
+        graph_save_path (str): Directory for output plots.
+        csv_path_2 (str | None): Optional second GPS label CSV in the same
+            format as csv_path. Merged before matching. Default None.
+ 
     Returns:
-        df_clusters: The simple df returned from clusters_to_dataframe, with added columns for labeled tree type.
-        
+        df_clusters (pd.DataFrame): Input DataFrame with two new columns added:
+            "Name"           — assigned species string, or "unknown"
+            "label_distance" — distance in metres to the matched GPS point,
+                               or inf for unmatched clusters
+        score (float): Matching score — fraction of GPS labels with exactly
+            one cluster within max_distance. Range [0, 1].
+ 
     Requirements:
-        numpy, pandas, open3d, matplotlib.pylot, pyproj, scipy.spatial
+        numpy, pandas, matplotlib, pyproj, scipy.spatial.KDTree,
+        scipy.optimize.linear_sum_assignment
     """
 
     # the graph title
@@ -155,10 +186,26 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
 
 def calculate_matching_score(csv_coords, cluster_coords, max_distance=5.0):
     """
-    Score is based on:
-    - GPS points with exactly one nearby cluster = good
-    - GPS points with no nearby cluster = bad
-    - GPS points with multiple nearby clusters = bad
+    Compute the fraction of GPS labels with exactly one nearby cluster.
+ 
+    For each GPS point, counts clusters within max_distance using a KDTree
+    ball query. The score is perfect_matches / total_gps_points.
+ 
+    Scoring categories:
+        Perfect (score contribution): exactly one cluster within max_distance
+        No match (penalised):         zero clusters within max_distance
+        Multiple (penalised):         two or more clusters within max_distance
+ 
+    Args:
+        csv_coords (np.ndarray): (M, 2) UTM XY coordinates of GPS labels.
+        cluster_coords (np.ndarray): (N, 2) UTM XY cluster centroids.
+        max_distance (float): Search radius in metres. Default 5.0.
+ 
+    Returns:
+        float: Matching score in [0, 1].
+ 
+    Requirements:
+        numpy, scipy.spatial.KDTree
     """
 
     tree = KDTree(cluster_coords)
@@ -193,7 +240,9 @@ def calculate_matching_score(csv_coords, cluster_coords, max_distance=5.0):
 
 def plot_gps_cluster_overlap(csv_coords, cluster_coords, df_labels, max_distance=5.0,
                              save_path="/home/hcr64/Pinyon-Detection/coordinate_overlap.png"):
-
+    """ 
+    Just for testing right now, temporary
+    """
     tree = KDTree(cluster_coords)
     results = tree.query_ball_point(csv_coords, r=max_distance)
 

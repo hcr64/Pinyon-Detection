@@ -4,32 +4,26 @@ import os
 
 def save_labeled_clusters(clusters, df_clusters, save_path):
     """
-    Desc:
-        Saves only the 1:1 labeled clusters (i.e. clusters assigned a known
-        species name by match_labels_to_clusters) to a folder. Each file is
-        named "<treetype>_<n>.ply", e.g. "pinyon_0.ply", "juniper_1.ply".
-
-        Clusters with the label "unknown" are skipped.
-
+    Save only GPS-labeled clusters to disk, named by species.
+ 
+    Iterates df_clusters and writes each cluster whose "Name" column holds a
+    known species (not "unknown") as "<species>_<n>.ply" — e.g. pinyon_0.ply,
+    juniper_1.ply. Clusters with label "unknown" are silently skipped. The
+    output folder is cleared of existing .ply files before writing.
+ 
     Args:
-        clusters, list of o3d.PointCloud:
-            The full cluster list produced by cluster_pointcloud() or
-            split_large_clusters(). Indices must correspond to the "file"
-            column in df_clusters.
-        df_clusters, pd.DataFrame:
-            The dataframe returned by match_labels_to_clusters(). Must have
-            at least the columns "file" (int cluster index) and "Name"
-            (species string or "unknown").
-        save_path, str:
-            Directory to write the .ply files into. Created automatically
-            if it does not exist. Existing .ply files in the folder are
-            removed before saving so the folder always reflects the current
-            run.
-
+        clusters (list of o3d.geometry.PointCloud): Full cluster list from
+            cluster_by_chm_peaks() or split_large_clusters(). Indices must
+            correspond to the "file" column in df_clusters.
+        df_clusters (pd.DataFrame): DataFrame returned by
+            match_labels_to_clusters(). Must contain at least the columns
+            "file" (int cluster index) and "Name" (species string or "unknown").
+        save_path (str): Directory to write .ply files into. Created
+            automatically if it does not exist.
+ 
     Returns:
-        saved, list of str:
-            Sorted list of file paths that were written.
-
+        list of str: Sorted list of file paths written.
+ 
     Requirements:
         open3d, os
     """

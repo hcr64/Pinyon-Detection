@@ -4,38 +4,33 @@ import open3d as o3d
 
 def strip_ground_from_clusters(clusters, ground_percentile=10, min_height_above_ground=0.5):
     """
-    Desc:
-        Removes ground-level points from each cluster by estimating the local
-        ground elevation as a low percentile of Z values within the cluster,
-        then discarding all points below (ground + min_height_above_ground).
-
-        This is done per-cluster rather than globally so that clusters on
-        sloped terrain (e.g. the Sunset Crater cinder cone) each get their
-        own local ground reference, rather than a single global Z cutoff which
-        would incorrectly strip canopy points from clusters on high ground.
-
+    Remove ground-level points from each cluster using a per-cluster Z threshold.
+ 
+    Estimates the local ground elevation inside each cluster as the
+    ground_percentile-th percentile of its Z values, then discards all points
+    below ground + min_height_above_ground. This is done per-cluster — not
+    globally — so that trees on sloped terrain (e.g. Sunset Crater's cinder
+    cone) each get their own ground reference rather than a single Z cutoff
+    that would incorrectly strip canopy points from trees on high ground.
+ 
+    Clusters that have fewer than 5 points remaining after stripping are
+    dropped entirely.
+ 
     Args:
-        clusters, list of o3d.PointCloud:
-            Input clusters, typically from cluster_by_chm_peaks() or after
-            split_large_clusters().
-        ground_percentile, int:
-            Percentile of Z values within each cluster used to estimate the
-            local ground level. Lower values are more conservative (keep more
-            points). Default 10 — the 10th percentile Z is a safe proxy for
-            the ground surface under the crown. Raise to 20-25 if clusters
-            still look like they have a lot of ground in them.
-        min_height_above_ground, float:
-            Points must be at least this many metres above the estimated ground
-            level to be kept. Default 0.5 m — removes grass, litter, and low
-            shrubs under the canopy without eating into the lower trunk.
-            Raise to 1.0-1.5 if you want to keep only upper canopy.
-
+        clusters (list of o3d.geometry.PointCloud): Input clusters from
+            cluster_by_chm_peaks() or split_large_clusters().
+        ground_percentile (int): Percentile of Z used as the ground proxy.
+            Lower values are more conservative (keep more points). Raise to
+            20-25 if clusters still contain obvious ground returns.
+            Default 10.
+        min_height_above_ground (float): Minimum height above the estimated
+            ground for a point to be kept (metres). Removes grass, litter,
+            and low shrubs without eating into the lower trunk. Default 0.5.
+ 
     Returns:
-        stripped_clusters, list of o3d.PointCloud:
-            Clusters with ground points removed. Clusters that lose too many
-            points to pass a basic sanity check (< 5 points remaining) are
-            dropped entirely.
-
+        list of o3d.geometry.PointCloud: Ground-stripped clusters. Clusters
+            reduced below 5 points are excluded.
+ 
     Requirements:
         numpy, open3d
     """

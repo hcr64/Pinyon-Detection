@@ -17,45 +17,41 @@ def build_chm(
     northern_hemisphere=True,
 ):
     """
-    Build a Canopy Height Model (CHM) from a raw point cloud and optionally
-    save it as a GeoTIFF raster via rasterio.
-
-    The CHM is computed as:
-        CHM = DSM (max Z per cell) - DTM (low-percentile Z per cell)
-
+    Build a Canopy Height Model (CHM) raster from a raw point cloud.
+ 
+    Rasterises the cloud at the given resolution, then computes:
+        DSM = max Z per cell  (top of canopy or bare ground)
+        DTM = low-percentile Z per cell  (ground surface proxy)
+        CHM = DSM − DTM, clipped to [0, ∞)
+ 
+    Use the raw (unfiltered) point cloud as input — the CHM needs ground
+    returns to build the DTM. Filtering vegetation out first will break the
+    ground estimate.
+ 
+    The CHM is saved as a single-band float32 GeoTIFF (LZW-compressed) when
+    save_path is provided, and the rasterio Affine transform is returned so
+    pixel indices can be converted back to UTM coordinates anywhere downstream.
+ 
     Args:
-        point_cloud (o3d.geometry.PointCloud):
-            Raw Open3D point cloud *before* green filtering.
-            Must have XYZ coordinates in UTM metres (same CRS used
-            elsewhere in the pipeline, e.g. EPSG:26912 for UTM zone 12N).
-        resolution (float):
-            Raster cell size in metres. Default 0.5 m.
-        ground_percentile (int):
-            Percentile of Z values within a cell used to estimate ground
-            elevation for the DTM. Default 5 (5th percentile).
-        save_path (str | None):
-            If given, the CHM is written to this path as a single-band
-            float32 GeoTIFF (e.g. "pointclouds/trial/chm.tif").
-            Directories are created automatically.  Pass None to skip
-            saving.
-        utm_zone (int):
-            UTM zone number matching the point cloud's projected CRS.
-            Default 12 (Arizona / Sunset Crater area).
-        northern_hemisphere (bool):
-            True for northern hemisphere EPSG codes (326xx), False for
-            southern (327xx). Default True.
-
+        point_cloud (o3d.geometry.PointCloud): Raw point cloud with XYZ in
+            UTM metres (e.g. EPSG:26912 for zone 12N).
+        resolution (float): Raster cell size in metres. Default 0.5.
+        ground_percentile (int): Z percentile used as the ground proxy for the
+            DTM. Default 5 (5th percentile).
+        save_path (str | None): File path for the output GeoTIFF. Parent
+            directories are created automatically. Pass None to skip saving.
+        utm_zone (int): UTM zone number matching the point cloud CRS.
+            Default 12 (Arizona / Sunset Crater).
+        northern_hemisphere (bool): True for northern hemisphere (EPSG 326xx),
+            False for southern (EPSG 327xx). Default True.
+ 
     Returns:
-        chm (np.ndarray):
-            2-D float32 array of vegetation heights (rows = Y, cols = X).
-            No-data cells are NaN.
-        transform (rasterio.transform.Affine):
-            Affine transform mapping pixel indices → UTM coordinates.
-            Pass to rasterio.open() or use with rasterio.transform.xy()
-            to convert pixel positions back to real-world coordinates.
-        crs (rasterio.crs.CRS):
-            Coordinate reference system of the raster.
-
+        chm (np.ndarray): 2-D float32 array of vegetation heights
+            (rows = Y descending, cols = X ascending). No-data cells are NaN.
+        transform (rasterio.transform.Affine): Affine transform mapping pixel
+            indices to UTM coordinates.
+        crs (rasterio.crs.CRS): Coordinate reference system of the raster.
+ 
     Requirements:
         numpy, pandas, open3d, rasterio
     """
@@ -141,16 +137,31 @@ def build_chm(
 
 def normalize_heights_by_ground(point_cloud, resolution=0.5, ground_percentile=5):
     """
-    Subtract a per-cell ground estimate from every point's Z value so that
-    vegetation heights are relative to local ground rather than sea level.
-
+    Normalise point Z values relative to the local ground surface.
+ 
+    Estimates the ground elevation within each raster cell as a low percentile
+    of Z, then subtracts it from every point in that cell so heights become
+    relative to local terrain rather than sea level.
+ 
+    Note: this was found to *hurt* matching scores at Sunset Crater
+    (NORMALIZE_HEIGHTS=False outperforms True), likely because the cinder cone
+    terrain introduces artefacts when the ground estimate is coarse. The
+    function is retained for experimental use.
+ 
     Args:
-        point_cloud (o3d.geometry.PointCloud): Input cloud with absolute Z.
+        point_cloud (o3d.geometry.PointCloud): Input cloud with absolute Z
+            in UTM metres.
         resolution (float): Cell size in metres for the ground grid.
-        ground_percentile (int): Percentile used as the ground proxy (default 5).
-
+            Default 0.5.
+        ground_percentile (int): Percentile used as the ground proxy.
+            Default 5.
+ 
     Returns:
         o3d.geometry.PointCloud: New point cloud with normalised Z values.
+            Colours are preserved from the input.
+ 
+    Requirements:
+        numpy, pandas, open3d
     """
     points = np.asarray(point_cloud.points).copy()
     x, y, z = points[:, 0], points[:, 1], points[:, 2]
@@ -183,15 +194,19 @@ def normalize_heights_by_ground(point_cloud, resolution=0.5, ground_percentile=5
 def load_chm(chm_path):
     """
     Read a CHM GeoTIFF saved by build_chm() back into numpy.
-
+ 
     Args:
         chm_path (str): Path to the .tif file.
-
+ 
     Returns:
-        chm (np.ndarray): 2-D float32 height array.
-        transform (Affine): Rasterio affine transform.
-        crs (CRS): Coordinate reference system.
+        chm (np.ndarray): 2-D float32 CHM height array.
+        transform (rasterio.transform.Affine): Rasterio affine transform.
+        crs (rasterio.crs.CRS): Coordinate reference system.
+ 
+    Requirements:
+        rasterio, numpy
     """
+    
     with rasterio.open(chm_path) as src:
         chm = src.read(1).astype(np.float32)
         transform = src.transform
