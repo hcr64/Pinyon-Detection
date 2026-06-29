@@ -1,8 +1,15 @@
+# ── imports ───────────────────────────────────────────────────────────────────
+
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
+from sklearn.model_selection import (
+    train_test_split,
+    cross_val_score,
+    StratifiedKFold,
+    RandomizedSearchCV,
+)
 from sklearn.metrics import (
     classification_report,
     confusion_matrix,
@@ -12,6 +19,12 @@ from sklearn.metrics import (
 )
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
+from sklearn.feature_selection import SelectFromModel
+from sklearn.utils.class_weight import compute_class_weight
+
+from imblearn.pipeline import Pipeline as ImbPipeline
+from imblearn.over_sampling import SMOTE
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -19,7 +32,9 @@ import matplotlib
 matplotlib.use("Agg")  # headless — safe for SLURM
 
 
-# ── feature columns used by all models ───────────────────────────────────────
+# ── baseline feature columns ──────────────────────────────────────────────────
+# engineer_features() appends four more; FEATURES is updated inside
+# train_tree_classifier() after feature selection runs.
 
 FEATURES = [
     "height", "radius", "n_points",
@@ -28,48 +43,50 @@ FEATURES = [
     "linearity", "planarity", "sphericity",
     "mean_r", "mean_g", "mean_b",
     "std_r", "std_g", "std_b",
+    # engineered features added by engineer_features() in get_deep_cluster_features.py
+    "height_to_radius",
+    "green_dominance",
+    "crown_volume",
+    "color_saturation",
+
+    "verticality", "flatness_ratio", "crown_base_ratio",
+
 ]
 
 
 def train_tree_classifier(df_deep, df_labels_matched,
                           save_confusion_matrix_path=None):
     """
-    Train and evaluate species classifiers on labeled cluster features.
- 
-    Merges df_deep with df_labels_matched on the "file" index column, drops
-    unlabeled and "unknown" rows, then trains multiple classifier types
-    (Gradient Boosting, SVM/RBF, Logistic Regression, KNN, and an ensemble)
-    each wrapped in a Pipeline with StandardScaler. Cross-validation uses
-    StratifiedKFold with fold count capped at min(3, min_class_size) to
-    handle small juniper and ponderosa sample sizes.
- 
-    Class imbalance is expected — pinyon likely dominates. Raw accuracy is
-    misleading; evaluate using per-class precision/recall/F1, macro F1, and
-    Cohen's Kappa which are all reported. Confusion matrix PNGs and
-    predict_proba columns are also produced.
- 
-    After training, the best model predicts species for *all* clusters in
-    df_deep (including unlabeled ones) and appends a "predicted_label" column.
-    In main.py the predictions are additionally filtered by confidence
-    (pinyon_confidence > 0.80) before counting confirmed detections.
- 
+    Train and compare species classifiers with four enhancements over the
+    baseline, then return the best-performing model.
+
+    Enhancements vs baseline
+    ────────────────────────
+    1. SMOTE oversampling  — synthetic minority samples for ponderosa/juniper
+       generated *inside* each CV fold so validation folds stay clean.
+    2. Manual class weights — ponderosa upweighted 2× beyond "balanced" so
+       the 20-sample class is not drowned by the 108-sample pinyon majority.
+    3. Feature selection   — SelectFromModel drops features below mean RF
+       importance; selected feature list is printed for inspection.
+    4. Hyperparameter tuning — RandomizedSearchCV over the RF parameter space
+       most likely to matter on small datasets (depth, leaf size, features).
+
+    Each variant runs alongside the existing baseline models so the comparison
+    table shows exactly what each intervention buys.
+
     Args:
-        df_deep (pd.DataFrame): Feature DataFrame from make_deep_dataframe().
-            Must contain the feature columns listed below.
-        df_labels_matched (pd.DataFrame): Cluster DataFrame returned by
-            match_labels_to_clusters(). Must have "file" and "Name" columns.
- 
+        df_deep (pd.DataFrame):
+            Output of make_deep_dataframe() + engineer_features(). Must
+            contain all columns in FEATURES.
+        df_labels_matched (pd.DataFrame):
+            Output of match_labels_to_clusters(). Must have "file" and "Name".
+        save_confusion_matrix_path (str | None):
+            Directory (or full path) to save the best-model confusion matrix
+            PNG. Pass None to skip. Default None.
+
     Returns:
-        model: Trained best-performing classifier (sklearn Pipeline).
-        features (list of str): Feature column names used for training:
-            height, radius, n_points, obb_extent_x/y/z,
-            eigenvalue_1/2/3, linearity, planarity, sphericity,
-            mean_r/g/b, std_r/g/b.
- 
-    Requirements:
-        sklearn.pipeline, sklearn.preprocessing, sklearn.ensemble,
-        sklearn.svm, sklearn.linear_model, sklearn.neighbors,
-        sklearn.model_selection, sklearn.metrics, pandas
+        best_model: Fitted estimator or Pipeline with highest test macro F1.
+        features (list[str]): Feature columns actually used after selection.
     """
 
     # ── merge features with labels ────────────────────────────────────────────
@@ -83,26 +100,156 @@ def train_tree_classifier(df_deep, df_labels_matched,
     print(class_counts.to_string())
     print()
 
-    # warn early if any class is very small — CV scores will be noisy
-    min_class = class_counts.min()
+    min_class = int(class_counts.min())
     if min_class < 10:
         print(f"⚠  Smallest class has only {min_class} samples — "
               f"treat CV scores with caution.\n")
 
-    X = df[FEATURES]
+    # ── only keep FEATURES columns that actually exist in df ─────────────────
+    # guards against engineer_features() not having been called yet
+    available = [f for f in FEATURES if f in df.columns]
+    missing   = [f for f in FEATURES if f not in df.columns]
+    if missing:
+        print(f"⚠  Missing engineered features (call engineer_features() first): "
+              f"{missing}\n")
+
+    X = df[available]
     y = df["Name"]
 
     # ── train / test split ────────────────────────────────────────────────────
-    # stratify so every split has all species represented
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
     )
 
+    # ── CV setup ──────────────────────────────────────────────────────────────
+    n_folds = min(3, min_class)
+    cv      = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=42)
+
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # ENHANCEMENT 1 — SMOTE
+    # Generated inside ImbPipeline so synthetic samples never leak into the
+    # validation fold. k_neighbors capped at min_class-1 to avoid a crash
+    # when ponderosa has fewer than 6 samples in a fold.
+    # ═════════════════════════════════════════════════════════════════════════
+    smote_k = min(4, min_class - 1)   # safe upper bound for k_neighbors
+
+    # target counts: oversample minority classes up toward pinyon majority,
+    # but don't exceed the actual pinyon count (no majority oversampling)
+    pinyon_count   = int(class_counts.get("pinyon",   108))
+    smote_targets  = {
+        sp: min(pinyon_count, max(int(cnt * 2), 40))
+        for sp, cnt in class_counts.items()
+        if sp != "pinyon"
+    }
+
+    smote = SMOTE(
+        sampling_strategy=smote_targets,
+        k_neighbors=smote_k,
+        random_state=42,
+    )
+
+    rf_smote = ImbPipeline([
+        ("smote", smote),
+        ("rf",    RandomForestClassifier(
+            n_estimators=200,
+            class_weight="balanced",
+            random_state=42,
+        )),
+    ])
+
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # ENHANCEMENT 2 — Manual class weights
+    # Start from sklearn's "balanced" weights then multiply ponderosa by 2×
+    # so the 20-sample class is pushed harder than balanced alone achieves.
+    # ═════════════════════════════════════════════════════════════════════════
+    classes_arr  = np.array(sorted(y.unique()))
+    bal_weights  = compute_class_weight("balanced", classes=classes_arr, y=y)
+    weight_dict  = dict(zip(classes_arr, bal_weights))
+    weight_dict["ponderosa"] = weight_dict.get("ponderosa", 1.0) * 2.0
+
+    rf_weighted = RandomForestClassifier(
+        n_estimators=200,
+        class_weight=weight_dict,
+        random_state=42,
+    )
+
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # ENHANCEMENT 3 — Feature selection
+    # Fit a quick RF on the training set, drop features below mean importance,
+    # then retrain a clean RF on the reduced feature set. The selected feature
+    # list is printed so you can hardcode survivors into FEATURES permanently.
+    # ═════════════════════════════════════════════════════════════════════════
+    selector_rf = RandomForestClassifier(
+        n_estimators=200, class_weight="balanced", random_state=42
+    )
+    selector = SelectFromModel(selector_rf, threshold="mean")
+    selector.fit(X_train, y_train)
+
+    selected_features = [f for f, keep
+                         in zip(available, selector.get_support()) if keep]
+    dropped_features  = [f for f, keep
+                         in zip(available, selector.get_support()) if not keep]
+
+    print(f"Feature selection: {len(selected_features)} kept, "
+          f"{len(dropped_features)} dropped")
+    print(f"  Kept:    {selected_features}")
+    print(f"  Dropped: {dropped_features}")
+    print()
+
+    X_train_sel = X_train[selected_features]
+    X_test_sel  = X_test[selected_features]
+    X_sel       = X[selected_features]
+
+    rf_selected = RandomForestClassifier(
+        n_estimators=200,
+        class_weight="balanced",
+        random_state=42,
+    )
+
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # ENHANCEMENT 4 — Hyperparameter tuning
+    # RandomizedSearchCV over the RF params most likely to matter on a small
+    # dataset. Runs on the full feature set (not the selected subset) so it
+    # is an independent comparison. n_iter=30 gives good coverage without
+    # the cost of a full grid search.
+    # ═════════════════════════════════════════════════════════════════════════
+    param_dist = {
+        "n_estimators":      [100, 200, 300, 500],
+        "max_depth":         [None, 5, 10, 15, 20],
+        "min_samples_leaf":  [1, 2, 4, 6],
+        "min_samples_split": [2, 5, 10],
+        "max_features":      ["sqrt", "log2", 0.5],
+    }
+
+    print("Running hyperparameter search (30 iterations × "
+          f"{n_folds} folds)...")
+    tuned_search = RandomizedSearchCV(
+        RandomForestClassifier(class_weight="balanced", random_state=42),
+        param_distributions=param_dist,
+        n_iter=30,
+        cv=cv,
+        scoring="f1_macro",
+        n_jobs=-1,
+        random_state=42,
+        verbose=0,
+    )
+    tuned_search.fit(X_train, y_train)
+    rf_tuned = tuned_search.best_estimator_
+
+    print(f"  Best params: {tuned_search.best_params_}")
+    print(f"  Best CV F1:  {tuned_search.best_score_:.3f}")
+    print()
+
+
     # ── model zoo ─────────────────────────────────────────────────────────────
-    # SVM and LR need scaled features; wrap them in a Pipeline so the scaler
-    # is fitted only on training data (no leakage into CV folds).
+    # baseline models + the four enhanced variants all in one comparison table
     models = {
-        "RandomForest": RandomForestClassifier(
+        # ── baselines (unchanged from previous version) ────────────────────
+        "RF_baseline": RandomForestClassifier(
             n_estimators=200,
             random_state=42,
             class_weight="balanced",
@@ -130,12 +277,12 @@ def train_tree_classifier(df_deep, df_labels_matched,
             ("scaler", StandardScaler()),
             ("knn",    KNeighborsClassifier(n_neighbors=5)),
         ]),
+        # ── enhanced variants ──────────────────────────────────────────────
+        "RF_SMOTE":    rf_smote,     # enhancement 1
+        "RF_weighted": rf_weighted,  # enhancement 2
+        "RF_tuned":    rf_tuned,     # enhancement 4
+        # RF_selected handled separately below (different feature set)
     }
-
-    # ── cross-validation setup ────────────────────────────────────────────────
-    # use min(3, min_class) folds so every fold has at least 1 sample per class
-    n_folds = min(3, int(min_class))
-    cv = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=42)
 
     # ── evaluate each model ───────────────────────────────────────────────────
     results_summary = []
@@ -147,8 +294,7 @@ def train_tree_classifier(df_deep, df_labels_matched,
         print(f"{'─' * 55}")
 
         model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
-
+        y_pred   = model.predict(X_test)
         macro_f1 = f1_score(y_test, y_pred, average="macro", zero_division=0)
         kappa    = cohen_kappa_score(y_test, y_pred)
 
@@ -156,7 +302,6 @@ def train_tree_classifier(df_deep, df_labels_matched,
         print(f"  Macro F1:      {macro_f1:.3f}")
         print(f"  Cohen's Kappa: {kappa:.3f}")
 
-        # per-fold CV scores
         cv_scores = cross_val_score(model, X, y, cv=cv,
                                     scoring="f1_macro", n_jobs=-1)
         print(f"  CV Macro F1 ({n_folds}-fold): "
@@ -165,14 +310,46 @@ def train_tree_classifier(df_deep, df_labels_matched,
         print()
 
         results_summary.append({
-            "model":         name,
-            "macro_f1":      round(macro_f1, 4),
-            "kappa":         round(kappa, 4),
-            "cv_macro_f1":   round(cv_scores.mean(), 4),
-            "cv_std":        round(cv_scores.std(), 4),
+            "model":       name,
+            "macro_f1":    round(macro_f1, 4),
+            "kappa":       round(kappa, 4),
+            "cv_macro_f1": round(cv_scores.mean(), 4),
+            "cv_std":      round(cv_scores.std(), 4),
+            "features":    "all",
         })
+        fitted_models[name] = (model, available)
 
-        fitted_models[name] = model
+    # ── enhancement 3 evaluated separately (reduced feature set) ─────────────
+    print(f"{'─' * 55}")
+    print(f"  RF_selected  ({len(selected_features)} features)")
+    print(f"{'─' * 55}")
+
+    rf_selected.fit(X_train_sel, y_train)
+    y_pred_sel   = rf_selected.predict(X_test_sel)
+    macro_f1_sel = f1_score(y_test, y_pred_sel, average="macro", zero_division=0)
+    kappa_sel    = cohen_kappa_score(y_test, y_pred_sel)
+
+    print(classification_report(y_test, y_pred_sel, zero_division=0))
+    print(f"  Macro F1:      {macro_f1_sel:.3f}")
+    print(f"  Cohen's Kappa: {kappa_sel:.3f}")
+
+    cv_sel = cross_val_score(rf_selected, X_sel, y, cv=cv,
+                             scoring="f1_macro", n_jobs=-1)
+    print(f"  CV Macro F1 ({n_folds}-fold): "
+          f"{cv_sel.mean():.3f} ± {cv_sel.std():.3f}  "
+          f"(folds: {', '.join(f'{s:.3f}' for s in cv_sel)})")
+    print()
+
+    results_summary.append({
+        "model":       "RF_selected",
+        "macro_f1":    round(macro_f1_sel, 4),
+        "kappa":       round(kappa_sel, 4),
+        "cv_macro_f1": round(cv_sel.mean(), 4),
+        "cv_std":      round(cv_sel.std(), 4),
+        "features":    f"{len(selected_features)} selected",
+    })
+    fitted_models["RF_selected"] = (rf_selected, selected_features)
+
 
     # ── comparison table ──────────────────────────────────────────────────────
     df_results = pd.DataFrame(results_summary).sort_values(
@@ -186,14 +363,15 @@ def train_tree_classifier(df_deep, df_labels_matched,
     print()
 
     # ── pick best model ───────────────────────────────────────────────────────
-    best_name  = df_results.iloc[0]["model"]
-    best_model = fitted_models[best_name]
+    best_name              = df_results.iloc[0]["model"]
+    best_model, best_feats = fitted_models[best_name]
+
     print(f"  Best model: {best_name}  "
           f"(Macro F1={df_results.iloc[0]['macro_f1']:.3f}, "
           f"Kappa={df_results.iloc[0]['kappa']:.3f})")
 
     # ── confusion matrix for best model ──────────────────────────────────────
-    y_pred_best = best_model.predict(X_test)
+    y_pred_best = best_model.predict(X_test[best_feats])
     classes     = sorted(y.unique())
     cm          = confusion_matrix(y_test, y_pred_best, labels=classes)
 
@@ -216,21 +394,28 @@ def train_tree_classifier(df_deep, df_labels_matched,
         print(f"  Confusion matrix saved to {save_confusion_matrix_path}")
 
     # ── feature importances (RF and GB only) ─────────────────────────────────
-    if hasattr(best_model, "feature_importances_"):
-        importances = pd.Series(best_model.feature_importances_, index=FEATURES)
+    estimator = best_model
+    if hasattr(best_model, "named_steps"):
+        # unwrap Pipeline or ImbPipeline to get the actual estimator
+        estimator = list(best_model.named_steps.values())[-1]
+
+    if hasattr(estimator, "feature_importances_"):
+        importances = pd.Series(estimator.feature_importances_, index=best_feats)
         print(f"\n  Feature importances — {best_name}:")
         print(importances.sort_values(ascending=False).to_string())
         print()
 
     # ── predict on all clusters (including unlabeled) ─────────────────────────
-    df_deep["predicted_label"] = best_model.predict(df_deep[FEATURES])
+    df_deep["predicted_label"] = best_model.predict(df_deep[best_feats])
 
-    # attach predict_proba if the model supports it
     if hasattr(best_model, "predict_proba"):
-        proba      = best_model.predict_proba(df_deep[FEATURES])
-        classes_   = best_model.classes_ if hasattr(best_model, "classes_") \
-                     else best_model.named_steps[list(best_model.named_steps)[-1]].classes_
-        for i, cls in enumerate(classes_):
+        proba = best_model.predict_proba(df_deep[best_feats])
+        # classes_ may live on the pipeline's last step
+        if hasattr(best_model, "classes_"):
+            out_classes = best_model.classes_
+        else:
+            out_classes = estimator.classes_
+        for i, cls in enumerate(out_classes):
             df_deep[f"prob_{cls}"] = proba[:, i]
 
-    return best_model, FEATURES
+    return best_model, best_feats

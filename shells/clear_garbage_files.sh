@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # remove log files 
-rm -rf logs/*
+rm -rf trial_data/Sunset_sfm_trial/logs/*
 
 # remove image files
-rm -rf images/*
+rm -rf trial_data/Sunset_sfm_trial/images/*
 
 # remove saved pointclouds
     # raw
