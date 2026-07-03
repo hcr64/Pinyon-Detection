@@ -27,7 +27,15 @@ def save_labeled_clusters(clusters, df_clusters, save_path):
     Requirements:
         open3d, os
     """
-
+    if "Name" not in df_clusters.columns:
+        raise ValueError(
+            "df_clusters is missing the 'Name' column — "
+            "match_labels_to_clusters() did not run its label-assignment "
+            "step before returning. Check for an early return, a shadowed "
+            "df_clusters variable, or an exception being swallowed inside "
+            "that function."
+        )
+    
     # prepare the output directory
     if os.path.exists(save_path):
         for f in os.listdir(save_path):

@@ -1,0 +1,345 @@
+"""
+run_clustering.py
+────────────────────────────────────────────────────────────────────────────────
+Point cloud → clusters → GPS-labeled clusters.
+
+Everything expensive lives here: loading .las files, building the CHM,
+cleaning/normalizing the point cloud, watershed segmentation, ground
+stripping, splitting oversized clusters, feature extraction, and GPS label
+matching. Ends by saving df_clusters (now labeled) and df_deep_clusters to
+disk via save_dataframes(), so train_model.py never has to touch a point
+cloud.
+
+Split out of main.py so that:
+  - sweep jobs (pinyon_sweep.sh) don't also run a full classifier comparison
+    on every array task, which was bloating log output for no reason (the
+    labeled set doesn't change between sweep iterations)
+  - classifier iteration doesn't require re-running clustering
+
+CLI args are unchanged from the old main.py, so pinyon_sweep.sh / pinyons.sh
+work as-is — just point them at this file instead of main.py.
+"""
+
+print("Loading packages...")
+
+from datetime import datetime
+import numpy as np
+import pandas as pd
+import laspy
+import open3d as o3d
+import os
+import argparse
+import csv
+
+from scipy.spatial import KDTree
+
+from constants import *
+from functions import *
+
+print("Successfully loaded all packages.")
+
+
+def main():
+
+    # ── CLI args ──────────────────────────────────────────────────────────
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--eps",               type=float, required=True)
+    parser.add_argument("--green_threshold",   type=float, required=True)
+    parser.add_argument("--max_radius",        type=float, required=True)
+    parser.add_argument("--max_distance",      type=float, required=True)
+    parser.add_argument("--min_points",        type=int,   required=True)
+    parser.add_argument("--voxel_size",        type=float, required=True)
+    parser.add_argument("--min_peak_distance", type=float, required=True)
+    parser.add_argument("--k",                 type=int,   required=True)
+    parser.add_argument("--min_height",        type=float, required=True)
+    parser.add_argument("--search_radius_m",   type=float, required=True)
+
+    parser.add_argument("--trial_name", type=str, required=True)
+    parser.add_argument("--job_id",     type=str, required=True)
+
+    args = parser.parse_args()
+
+    EPS               = args.eps
+    GREEN_THRESHOLD   = args.green_threshold
+    MAX_RADIUS        = args.max_radius
+    MAX_DISTANCE      = args.max_distance
+    MIN_POINTS        = args.min_points
+    VOXEL_SIZE        = args.voxel_size
+    MIN_PEAK_DISTANCE = args.min_peak_distance
+    K                 = args.k
+
+    # hard coded for now
+    MIN_DENSITY_RATIO = 1.5
+    S_SIGMA           = 1.0
+
+    MIN_HEIGHT      = args.min_height
+    SEARCH_RADIUS_M = args.search_radius_m
+
+    # non-parameter variables
+    TRIAL_NAME = args.trial_name
+    JOB_ID     = args.job_id
+
+    NORMALIZE_HEIGHTS = True
+
+    # from the constant.py, update for specific trial
+    PATHS = get_paths(TRIAL_NAME)
+
+    # print settings
+    print()
+    print()
+    print("#### SETTINGS ####")
+    print("EPS:", EPS)
+    print("MIN_POINTS:", MIN_POINTS)
+    print("GREEN_THRESHOLD:", GREEN_THRESHOLD)
+    print("MAX_DISTANCE:", MAX_DISTANCE)
+    print("MAX_RADIUS:", MAX_RADIUS)
+    print("VOXEL_SIZE:", VOXEL_SIZE)
+    print("MIN_PEAK_DISTANCE:", MIN_PEAK_DISTANCE)
+    print("K:", K)
+    print("MIN_DENSITY_RATIO:", MIN_DENSITY_RATIO)
+
+    K = MIN_POINTS
+
+    print("TRIAL_NAME:", TRIAL_NAME)
+    print("JOB_ID:", JOB_ID)
+    print("Program Start Time: " + datetime.now().strftime("%H:%M:%S"))
+    print()
+    print()
+
+    # ── load raw point cloud ─────────────────────────────────────────────
+    if STEPS['Load_Pointcloud']:
+        print('Loading point cloud...')
+        point_cloud = las_folder_to_pointcloud(
+            PATHS['Data'],
+            silent=SILENT,
+            downsize_pcd=DOWNSIZE,
+            v_size=VOXEL_SIZE)
+        print('Point cloud successfully loaded.\n')
+
+        print(f"Saving raw point cloud... ( to { PATHS['Raw_pcd'] }")
+        if not os.path.exists(os.path.dirname(PATHS['Raw_pcd'])):
+            os.makedirs(os.path.dirname(PATHS['Raw_pcd']))
+        o3d.io.write_point_cloud(f"{ PATHS['Raw_pcd'] }", point_cloud)
+        print('Raw point cloud successfully saved.\n')
+
+    # read in from disc, can save ~10 minutes
+    else:
+        print(f"Reading in raw pointcloud... (from {PATHS['Raw_pcd']})")
+        if os.path.exists(os.path.dirname(PATHS['Raw_pcd'])):
+            point_cloud = o3d.io.read_point_cloud(PATHS['Raw_pcd'])
+            print(f"Raw point cloud read in. ({PATHS['Raw_pcd']})")
+        else:
+            print(f"Could not find pointcloud save path ({PATHS['Raw_pcd']}). Exiting program...")
+            return 1
+        print()
+
+    # downsize, only needed if making a chm or cleaning, can take several minutes too
+    if STEPS['Make_CHM'] or STEPS['Clean_Pointcloud']:
+        print("Downsizing pointcloud...")
+        point_cloud = point_cloud.voxel_down_sample(voxel_size=VOXEL_SIZE)
+        print("Done downsizing.\n")
+
+    # ── CHM ───────────────────────────────────────────────────────────────
+    if STEPS['Make_CHM']:
+        print('Making CHM...')
+        chm, transform, crs = build_chm(
+            point_cloud,
+            resolution=0.5,
+            ground_percentile=5,
+            save_path=PATHS['CHM']
+        )
+        print(f"CHM complete. (Saved to {PATHS['CHM']})\n")
+
+    # read in the CHM from disk, can also save several minutes 
+    else:
+        if os.path.exists(PATHS['CHM']):
+            print(f"Loading in CHM... (from { PATHS['CHM'] })")
+            chm, transform, crs = load_chm(PATHS['CHM'])
+        else:
+            print(f"Cannot find CHM save path. ({ PATHS['CHM'] }) Exiting program...")
+            return 1
+        print('CHM loaded in successfully.')
+
+    # can take quite a while, worth skipping if possible
+    if STEPS['Make_Clusters']:
+        print("Finding peaks in CHM...")
+        peak_coords, peak_heights = find_chm_peaks(
+            chm,
+            transform,
+            min_height=MIN_HEIGHT,
+            search_radius_m=SEARCH_RADIUS_M,
+            smooth_sigma=S_SIGMA)
+        print()
+
+    # ── clean pointcloud ──────────────────────────────────────────────────
+    if STEPS['Clean_Pointcloud']:
+        points = np.asarray(point_cloud.points)
+        print(f"Point count:  {len(points)}")
+        print(f"XYZ min: {points.min(axis=0)}")
+        print(f"XYZ max: {points.max(axis=0)}")
+        print(f"Any NaN: {np.any(np.isnan(points))}")
+
+        if NORMALIZE_HEIGHTS:
+            print("Normalizing heights by ground surface...")
+            point_cloud = normalize_heights_by_ground(point_cloud, resolution=0.5)
+            print("Heights normalized.")
+
+        print("Cleaning up point cloud...")
+        point_cloud = clean_up_pointcloud(point_cloud, green_threshold=GREEN_THRESHOLD)
+        print("Point cloud successfully cleaned.\n")
+
+        print(point_cloud)
+        print("Saving cleaned pointcloud...")
+        if not os.path.exists(os.path.dirname(PATHS['Cleaned_pcd'])):
+            os.makedirs(os.path.dirname(PATHS['Cleaned_pcd']))
+        o3d.io.write_point_cloud(PATHS['Cleaned_pcd'], point_cloud)
+        print("Cleaned pointcloud saved.\n")
+
+    else:
+        print("Unprocessed pointcloud being used. Pointcloud is not being 'cleaned.'\n")
+
+    # ── cluster / load clusters ──────────────────────────────────────────
+    if STEPS['Make_Clusters']:
+        print("Clustering point cloud...")
+        clusters = cluster_by_chm_peaks(
+            point_cloud,
+            peak_coords,
+            chm=chm,
+            transform=transform,
+            crown_radius=MAX_RADIUS,
+            min_points=MIN_POINTS
+        )
+        print("Point cloud clustered.\n")
+
+        MIN_POINT_HEIGHT = 1.5
+        clusters = [
+            c for c in clusters
+            if np.asarray(c.points)[:, 2].max() - np.asarray(c.points)[:, 2].min() > MIN_POINT_HEIGHT
+        ]
+
+        clusters = filter_clusters_by_green_crown(
+            clusters,
+            top_fraction=0.20,
+            min_exg=0.05,
+        )
+
+        print("Saving clusters...")
+        save_clusters(clusters, PATHS['Clusters'])
+        print("Clusters saved.\n")
+
+    else:
+        print(f"Reading in clusters... (from {PATHS['Clusters']})")
+        if os.path.exists(PATHS['Clusters']):
+            clusters = load_clusters(PATHS['Clusters'])
+            print("Clusters read in.")
+        else:
+            print(f"Could not find clusters save path ({PATHS['Clusters']}). Exiting program...")
+            return 1
+        print()
+
+    # ── shared post-branch: ground strip + split ─────────────────────────
+    # Runs regardless of whether clusters were just built or loaded from
+    # disk, so clusters loaded from a previous run still get split.
+    if not STEPS['Clean_Pointcloud']:
+        print("Stripping ground from clusters...")
+        clusters = strip_ground_from_clusters(clusters, ground_percentile=10, min_height_above_ground=0.5)
+        print("Ground stripped.\n")
+
+    print("Splitting clusters...")
+    clusters = split_large_clusters(
+        clusters,
+        min_points=MIN_POINTS,
+        max_radius=MAX_RADIUS,
+        min_peak_distance=MIN_PEAK_DISTANCE,
+        k=K,
+        min_density_ratio=MIN_DENSITY_RATIO
+    )
+    print("Clusters split.\n")
+
+    print("Filtering clusters...")
+    before = len(clusters)
+    clusters = [c for c in clusters if filter_cluster(c, min_height=1.0, min_radius=0.3)]
+    print(f"Filtered {before - len(clusters)} non-tree clusters, {len(clusters)} remaining\n")
+
+    # ── feature extraction ────────────────────────────────────────────────
+    if STEPS['Make_Clusters']:
+        print("Making cluster df...")
+        df_clusters = clusters_to_dataframe(clusters, k=K)
+        print("Cluster df made.\n")
+
+        print("Making deep data cluster df...")
+        df_deep_clusters = make_deep_dataframe(clusters)
+        df_deep_clusters = engineer_features(df_deep_clusters)
+        print("Deep data cluster df made.\n")
+
+    else:
+        print("Reading in feature dataframes...")
+        df_clusters, df_deep_clusters = load_dataframes(PATHS['Dataframes'])
+        print("Dataframes read in.\n")
+
+    # ── GPS label matching ────────────────────────────────────────────────
+    print("Assigning labels to clusters...")
+    df_clusters, score = match_labels_to_clusters(
+        PATHS['Labels'],
+        df_clusters,
+        csv_path_2=os.path.dirname(PATHS['Labels']) + '/sunsetCraterMay26.csv',
+        max_distance=MAX_DISTANCE,
+        graph_save_path=PATHS['Images'],
+        gps_sigma=4.0,
+        job_id=JOB_ID,
+        clusters=clusters,
+        multi_match_save_path=PATHS["MM_save_path"],
+        graph_subtitle=f"EPS:{EPS}-MR:{MAX_RADIUS}-GT:{GREEN_THRESHOLD}-MPts:{MIN_POINTS}-MD:{MAX_DISTANCE}-K:{K}-MPD:{MIN_PEAK_DISTANCE}"
+    )
+    print("Labels assigned.\n")
+
+    # save labeled clusters — moved here (after labeling) so "Name" is
+    # actually populated when save_labeled_clusters filters on it
+    print("Saving labeled clusters...")
+    save_labeled_clusters(
+        clusters,
+        df_clusters,
+        save_path=PATHS['Labeled_clusters']
+    )
+    print("Labeled clusters saved.\n")
+
+    # save dataframes AFTER labeling so train_model.py loads a df_clusters
+    # that already has "Name" / "label_distance" populated
+    print("Saving feature dataframes...")
+    save_dataframes(df_clusters, df_deep_clusters, PATHS['Dataframes'])
+    print("Dataframes saved.\n")
+
+    # ── log matching score ────────────────────────────────────────────────
+    if STEPS['Cluster_accuracy']:
+        results = {
+            "eps":               EPS,
+            "green_threshold":   GREEN_THRESHOLD,
+            "max_radius":        MAX_RADIUS,
+            "max_distance":      MAX_DISTANCE,
+            "min_points":        MIN_POINTS,
+            "voxel_size":        VOXEL_SIZE,
+            "min_peak_distance": MIN_PEAK_DISTANCE,
+            "k":                 K,
+            "min_height":        MIN_HEIGHT,
+            "search_radius_m":   SEARCH_RADIUS_M,
+            "normalize_heights": NORMALIZE_HEIGHTS,
+            "matching_score":    score,
+        }
+
+        results_path = PATHS['GPS_results']
+        os.makedirs(os.path.dirname(results_path), exist_ok=True)
+        file_exists = os.path.exists(results_path)
+
+        with open(results_path, "a", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=results.keys())
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow(results)
+
+        print(f"Results saved to {results_path}")
+
+    print("Clustering + labeling complete.")
+    print("Time at Completion: " + datetime.now().strftime("%H:%M:%S"))
+
+
+main()

@@ -31,7 +31,10 @@ SEARCH_RADIUS_M=$(  echo $PARAMS | awk '{print $10}')
 
 echo "Task ${SLURM_ARRAY_TASK_ID}: eps=$EPS green=$GREEN crown=$RADIUS max_dist=$MAX_DISTANCE min_pts=$MIN_POINTS voxel=$VOXEL_SIZE mpd=$MIN_PEAK_DISTANCE k=$K min_h=$MIN_HEIGHT sr=$SEARCH_RADIUS_M"
 
-python -u main.py \
+# sweeps only ever needed clustering + GPS matching score — never the
+# classifier comparison, which used to run (and clutter these logs) on
+# every single array task via the old main.py
+python -u run_clustering.py \
     --eps              $EPS \
     --green_threshold  $GREEN \
     --max_radius       $RADIUS \

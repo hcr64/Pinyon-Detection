@@ -1,7 +1,8 @@
 # io
 from .io.las_folder_to_pointcloud import las_folder_to_pointcloud
-from .io.save_clusters import save_clusters, load_clusters
+from .io.save_clusters import save_clusters, load_clusters, save_dataframes, load_dataframes
 from .io.save_labeled_clusters import save_labeled_clusters
+from .io.save_clusters_descriptive import save_clusters_descriptive
 
 # preprocessing
 from .preprocessing.clean_up_pointcloud import clean_up_pointcloud
@@ -13,15 +14,18 @@ from .detection.find_chm_peaks import find_chm_peaks, filter_clusters_by_chm_pea
 from .detection.cluster_by_chm_peaks import cluster_by_chm_peaks
 from .detection.cluster_pointcloud import cluster_pointcloud
 from .detection.split_large_clusters import split_large_clusters, filter_cluster
+from .detection.filter_green_crown import filter_clusters_by_green_crown
 
 # features
 from .features.get_pointcloud_stats import clusters_to_dataframe
 from .features.get_deep_cluster_features import make_deep_dataframe, engineer_features
-from .features.plot_feature_seperability import plot_feature_seperability
+from .features.plot_feature_separability import plot_feature_separability
 
 # labeling
 from .labeling.match_labels_to_clusters import match_labels_to_clusters
+from .labeling.save_multimatch_clusters import save_multimatch_clusters
 
 # classification
 from .classification.train_tree_classifier import train_tree_classifier
 from .classification.advanced_classifiers import run_advanced_classifiers
+from .classification.semi_supervised import run_label_spreading

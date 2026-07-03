@@ -58,7 +58,9 @@ def main():
 	VOXEL_SIZE      = args.voxel_size
 	MIN_PEAK_DISTANCE = args.min_peak_distance
 	K = args.k
+
 	MIN_DENSITY_RATIO = 1.5 # args.min_density_ratio
+	S_SIGMA = 1.0
 
 	MIN_HEIGHT       = args.min_height
 	SEARCH_RADIUS_M  = args.search_radius_m
@@ -72,7 +74,9 @@ def main():
 
 	NORMALIZE_HEIGHTS=True
 
-
+	# get the paths 
+	PATHS = get_paths( TRIAL_NAME )
+	
 	# print general settings / command line args
 	print()
 	print()
@@ -200,7 +204,8 @@ def main():
 			chm, 
 			transform, 
 			min_height=MIN_HEIGHT, 
-			search_radius_m=SEARCH_RADIUS_M)
+			search_radius_m=SEARCH_RADIUS_M,
+			smooth_sigma=S_SIGMA)
 		print()
 
 
@@ -277,6 +282,7 @@ def main():
 	if STEPS['Make_Clusters']:
 		# get clusters from the point cloud
 		print("Clustering point cloud...")
+
 		# clusters, labels = cluster_pointcloud( point_cloud, eps=EPS, min_points=MIN_POINTS )
 		clusters = cluster_by_chm_peaks(
 			point_cloud,
@@ -296,11 +302,47 @@ def main():
 			if np.asarray(c.points)[:, 2].max() - np.asarray(c.points)[:, 2].min() > MIN_POINT_HEIGHT
 		]
 
+		# filter out non-vegetation clusters by checking the greenness of their
+		# most-green points — removes rock patches and bare-ground returns that
+		# passed the height filter but have weak greenness throughout
+		clusters = filter_clusters_by_green_crown(
+			clusters,
+			top_fraction=0.20,   # inspect the greenest 20% of points
+			min_exg=0.05,        # mean ExG of that slice must clear this bar
+		)
+
 		# save the clusters in the clusters folder
 		print("Saving clusters...")
 		save_clusters( clusters, PATHS['Clusters'] )
 		print("Clusters saved.")
 		print()
+
+		# only do this if the pointcloud is NOT being 'cleaned' first, 
+		if not STEPS['Clean_Pointcloud']:
+			# get rid of the floor of the clusters
+			print("Stripping ground from clusters...")
+			clusters = strip_ground_from_clusters(clusters, ground_percentile=10, min_height_above_ground=0.5)
+			print("Ground stripped.")
+
+		# split clusters into smaller if too large
+		print("Splitting clusters...")
+		clusters = split_large_clusters(clusters, 
+			min_points=MIN_POINTS, 
+			max_radius=MAX_RADIUS, 
+			min_peak_distance=MIN_PEAK_DISTANCE,
+			k=K,
+			min_density_ratio=MIN_DENSITY_RATIO
+			)
+		print("Clusters split.")
+		print()
+
+		# filter out non-tree clusters  <-- add here
+		print("Filtering clusters...")
+		before = len(clusters)
+		clusters = [c for c in clusters if filter_cluster(c, min_height=1.0, min_radius=0.3)]
+		print(f"Filtered {before - len(clusters)} non-tree clusters, {len(clusters)} remaining")
+		print()
+
 	
 	# If clusters will not be computed, try to load them in instead
 	else:
@@ -322,51 +364,56 @@ def main():
 		print()
 	
 
-	# only do this if the pointcloud is NOT being 'cleaned' first, 
-	if not STEPS['Clean_Pointcloud']:
-		# get rid of the floor of the clusters
-		print("Stripping ground from clusters...")
-		clusters = strip_ground_from_clusters(clusters, ground_percentile=10, min_height_above_ground=0.5)
-		print("Ground stripped.")
+		# only do this if the pointcloud is NOT being 'cleaned' first, 
+		if not STEPS['Clean_Pointcloud']:
+			# get rid of the floor of the clusters
+			print("Stripping ground from clusters...")
+			clusters = strip_ground_from_clusters(clusters, ground_percentile=10, min_height_above_ground=0.5)
+			print("Ground stripped.")
 
 
 
-	# split the clusters if desired, 
-	# no else statement needed here, not too time consuming
-	# DOES NOT GET SAVED TO DISK
-	if STEPS['Split_clusters']:
+	#------------------------------------------------------------------------
+	### GET FEATURES
+	#------------------------------------------------------------------------
+	# can take several minutes, worth reading in from disk when training models
+	# only NEED to do when changing clusters, either plitting or making them
+	if STEPS['Make_Clusters']:
 
-		# split clusters into smaller if too large
-		print("Splitting clusters...")
-		clusters = split_large_clusters(clusters, 
-			min_points=MIN_POINTS, 
-			max_radius=MAX_RADIUS, 
-			min_peak_distance=MIN_PEAK_DISTANCE,
-			k=K,
-			min_density_ratio=MIN_DENSITY_RATIO
+		# get the cluster df
+		print("Making cluster df...")
+		df_clusters = clusters_to_dataframe( clusters, k=K )
+		print("Cluster df made.")
+		print()
+
+		# get the deep data cluster df
+		print("Making deep data cluster df...")
+		df_deep_clusters = make_deep_dataframe( clusters )
+		df_deep_clusters = engineer_features(df_deep_clusters)
+		print("Deep data cluster df made.")
+		print()
+
+		# save the dataframes to the disk
+		save_dataframes(df_clusters, df_deep_clusters, PATHS['Dataframes'])
+
+		# save the labeled clusters to a folder
+		print("saving Labeled clusters...")
+		save_labeled_clusters(
+			clusters, 
+			df_clusters, 
+			save_path=PATHS['Labeled_clusters']
 			)
-		print("Clusters split.")
+		print("Labeled clusters saved.")
+		print()
+	
+	# read in dataframes, labeled clusters are not being used currently
+	else:
+		print("Reading in feature dataframes...")
+		df_clusters, df_deep_clusters = load_dataframes(PATHS['Dataframes'])
+		print("Dataframes read in.")
 		print()
 
-		# filter out non-tree clusters  <-- add here
-		print("Filtering clusters...")
-		before = len(clusters)
-		clusters = [c for c in clusters if filter_cluster(c, min_height=1.0, min_radius=0.3)]
-		print(f"Filtered {before - len(clusters)} non-tree clusters, {len(clusters)} remaining")
-		print()
 
-
-	# get the cluster df
-	print("Making cluster df...")
-	df_clusters = clusters_to_dataframe( clusters, k=K )
-	print("Cluster df made.")
-	print()
-
-	# get the deep data cluster df
-	print("Making deep data cluster df...")
-	df_deep_clusters = make_deep_dataframe( clusters )
-	print("Deep data cluster df made.")
-	print()
 
 	# assign lables to clusters
 	print("Assigning labels to clusters...")
@@ -376,22 +423,17 @@ def main():
 		csv_path_2=os.path.dirname( PATHS['Labels'] ) + '/sunsetCraterMay26.csv', 
 		max_distance=MAX_DISTANCE,
 		graph_save_path = PATHS['Images'],
+		gps_sigma=4.0,
 		job_id=JOB_ID,
+		clusters=clusters,
+		multi_match_save_path=PATHS["MM_save_path"],
 		graph_subtitle=f"EPS:{EPS}-MR:{MAX_RADIUS}-GT:{GREEN_THRESHOLD}-MPts:{MIN_POINTS}-MD:{MAX_DISTANCE}-K:{K}-MPD:{MIN_PEAK_DISTANCE}"
 		)
 	print("Labels assigned.")
 	print()
-
-	# save the labeled clusters to a folder
-	print("saving Labeled clusters...")
-	save_labeled_clusters(
-		clusters, 
-		df_clusters, 
-		save_path=PATHS['Labeled_clusters']
-		)
-	print("Labeled clusters saved.")
-	print()
 	
+
+
 	# test the accuracy of assigning GPS points to Clusters
 	if STEPS['Cluster_accuracy']:
 		
@@ -407,7 +449,6 @@ def main():
 			"k":                 K,
 			"min_height":        MIN_HEIGHT,        # add
 			"search_radius_m":   SEARCH_RADIUS_M,   # add
-			"Split_clusters":    STEPS['Split_clusters'],
 			"normalize_heights": NORMALIZE_HEIGHTS,
 			"matching_score":    score,
 		}
@@ -428,24 +469,48 @@ def main():
 	# training the model, never too time consuming, generally less than a minute or two.
 	if STEPS['Train_Model']:
 		# model = train_tree_classifier(df_deep_clusters, df_clusters)
-		model, features = train_tree_classifier(df_deep_clusters, df_clusters)
+		
+		plot_feature_separability(
+			df_deep_clusters,
+			df_clusters,
+			save_path=PATHS['Images']
+		)
+		
+		if True:
+			model, features = train_tree_classifier(
+				df_deep_clusters,
+				df_clusters,
+				save_confusion_matrix_path=PATHS['Images'] + 'confusion_matrix.png'
+			)
+		else:
+			model, features = run_advanced_classifiers(
+				df_deep_clusters,
+				df_clusters,
+				save_path=PATHS['Images']
+			)
+
+			# ── semi-supervised label spreading ──────────────────────────────────────
+			print("Running semi-supervised label spreading...")
+			df_deep_clusters = run_label_spreading(
+				df_deep_clusters,
+				df_clusters,
+				save_path=PATHS['Images'],
+				alpha=0.2,          # how much labeled nodes can drift — keep low
+				gamma=0.5,          # RBF neighbourhood tightness
+				confidence_threshold=0.80
+			)
+			print("Label spreading complete.")
 
 		# only label as pinyon if model is >80% confident
-		probs = model.predict_proba(df_deep_clusters[features])
-		pinyon_idx = list(model.classes_).index("pinyon")
-
-		df_deep_clusters["pinyon_confidence"] = probs[:, pinyon_idx]
-		df_deep_clusters["predicted_label"] = model.predict(df_deep_clusters[features])
-
-		# filter to only high confidence pinyons
-		confirmed_pinyons = df_deep_clusters[
-			(df_deep_clusters["predicted_label"] == "pinyon") &
-			(df_deep_clusters["pinyon_confidence"] > 0.80)
-		]
-
-		print(f"High confidence pinyons: {len(confirmed_pinyons)}")
+		if "prob_pinyon" in df_deep_clusters.columns:
+			confirmed_pinyons = df_deep_clusters[
+				(df_deep_clusters["predicted_label"] == "pinyon") &
+				(df_deep_clusters["prob_pinyon"] > 0.80)
+			]
+			print(f"High confidence pinyons: {len(confirmed_pinyons)}")
 
 		print(df_deep_clusters[["file", "predicted_label"]])
+
 
 	print("Program complete.")
 

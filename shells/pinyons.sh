@@ -44,18 +44,18 @@ SEARCH_RADIUS_M=3.0
 # find trial_data/$TRIAL_NAME/logs/* -mmin +15 -type f -delete
 # find trial_data/$TRIAL_NAME/images/* -mmin +15 -type f -delete
 
-# touch everythin in the data folder so it doesn;t get thrown away
+# touch everything in the data folder so it doesn't get thrown away
 touch /scratch/hcr64/Pinyon-Detection/data/$TRIAL_NAME/point_cloud/*
 
-# print message with all params
 echo "Task ${SLURM_ARRAY_TASK_ID}: eps=$EPS green=$GREEN crown=$RADIUS max_dist=$MAX_DISTANCE min_pts=$MIN_POINTS voxel=$VOXEL_SIZE mpd=$MIN_PEAK_DISTANCE k=$K min_h=$MIN_HEIGHT sr=$SEARCH_RADIUS_M"
 
-# run the program with all arguments
-python -u main.py \
+# clustering + GPS labeling only. Run train_model.sh (or `python
+# train_model.py --trial_name $TRIAL_NAME`) separately once this finishes.
+python -u run_clustering.py \
     --eps               $EPS \
     --green_threshold   $GREEN \
     --max_radius        $RADIUS \
-    --max_distance      $MAX_DISTANCE \
+    --max_distance       $MAX_DISTANCE \
     --min_points        $MIN_POINTS \
     --voxel_size        $VOXEL_SIZE \
     --min_peak_distance $MIN_PEAK_DISTANCE \

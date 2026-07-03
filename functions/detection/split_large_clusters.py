@@ -4,6 +4,7 @@ from scipy.spatial import KDTree
 from sklearn.cluster import MeanShift, estimate_bandwidth
 
 from functions.io.save_clusters import save_clusters
+from functions.io.save_clusters_descriptive import save_clusters_descriptive
 
 def filter_cluster(pcd, min_height=1.0, min_radius=0.3):
     """
@@ -53,7 +54,10 @@ def split_large_clusters(clusters, min_points=10, max_radius=2.0,
     Each sub-cluster is validated by filter_cluster() before being accepted.
     Sub-clusters that fail validation are discarded individually; the split is
     only fully reverted if no sub-clusters survive validation at all. Pre-split
-    clusters are optionally saved for post-run inspection.
+    clusters are optionally saved for post-run inspection, named descriptively
+    (radius + sub-crown count) rather than by generic index — this folder is
+    a Drive export for visual review and is never re-read by load_clusters(),
+    so filenames don't need to encode a positional index.
  
     Args:
         clusters (list of o3d.geometry.PointCloud): Input clusters from
@@ -86,6 +90,7 @@ def split_large_clusters(clusters, min_points=10, max_radius=2.0,
 
     final_clusters = []
     pre_split_clusters = []
+    pre_split_names = []
 
     for pcd in clusters:
         points = np.asarray(pcd.points)
@@ -151,6 +156,7 @@ def split_large_clusters(clusters, min_points=10, max_radius=2.0,
 
         # this cluster is a valid split candidate — record it
         pre_split_clusters.append(pcd)
+        pre_split_names.append(f"radius{radius:.2f}m_split_into_{n_trees}")
 
         print(f"Mean Shift split cluster (radius={radius:.2f}m) into {n_trees} sub-clusters")
 
@@ -176,7 +182,7 @@ def split_large_clusters(clusters, min_points=10, max_radius=2.0,
 
     # save pre-split clusters locally if a path was given
     if save_pre_split_path is not None:
-        save_clusters(pre_split_clusters, save_pre_split_path)
+        save_clusters_descriptive(pre_split_clusters, pre_split_names, save_pre_split_path)
         print(f"Saved {len(pre_split_clusters)} pre-split clusters to {save_pre_split_path}")
 
     print(f"Clusters before splitting: {len(clusters)}")

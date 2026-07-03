@@ -48,10 +48,20 @@ FEATURES = [
     "green_dominance",
     "crown_volume",
     "color_saturation",
-
-    "verticality", "flatness_ratio", "crown_base_ratio",
-
 ]
+
+
+# ── enhancement switches ──────────────────────────────────────────────────────
+# Set any entry to False to skip that enhancement entirely.
+# All four default to True so the full comparison runs out of the box.
+# Turn off slow ones (SMOTE, TUNING) when iterating quickly on features.
+
+ENHANCEMENTS = {
+    "SMOTE":     False,   # synthetic oversampling for juniper/ponderosa
+    "WEIGHTING": True,   # manual 2× upweight on ponderosa beyond "balanced"
+    "SELECTION": True,   # drop features below mean RF importance
+    "TUNING":    False,   # RandomizedSearchCV over RF hyperparameters (slowest)
+}
 
 
 def train_tree_classifier(df_deep, df_labels_matched,
@@ -132,31 +142,34 @@ def train_tree_classifier(df_deep, df_labels_matched,
     # validation fold. k_neighbors capped at min_class-1 to avoid a crash
     # when ponderosa has fewer than 6 samples in a fold.
     # ═════════════════════════════════════════════════════════════════════════
-    smote_k = min(4, min_class - 1)   # safe upper bound for k_neighbors
+    if ENHANCEMENTS["SMOTE"]:
+        print("Enhancement: SMOTE enabled")
+        smote_k = min(4, min_class - 1)
 
-    # target counts: oversample minority classes up toward pinyon majority,
-    # but don't exceed the actual pinyon count (no majority oversampling)
-    pinyon_count   = int(class_counts.get("pinyon",   108))
-    smote_targets  = {
-        sp: min(pinyon_count, max(int(cnt * 2), 40))
-        for sp, cnt in class_counts.items()
-        if sp != "pinyon"
-    }
+        pinyon_count  = int(class_counts.get("pinyon", 108))
+        smote_targets = {
+            sp: min(pinyon_count, max(int(cnt * 2), 40))
+            for sp, cnt in class_counts.items()
+            if sp != "pinyon"
+        }
 
-    smote = SMOTE(
-        sampling_strategy=smote_targets,
-        k_neighbors=smote_k,
-        random_state=42,
-    )
-
-    rf_smote = ImbPipeline([
-        ("smote", smote),
-        ("rf",    RandomForestClassifier(
-            n_estimators=200,
-            class_weight="balanced",
+        smote = SMOTE(
+            sampling_strategy=smote_targets,
+            k_neighbors=smote_k,
             random_state=42,
-        )),
-    ])
+        )
+
+        rf_smote = ImbPipeline([
+            ("smote", smote),
+            ("rf",    RandomForestClassifier(
+                n_estimators=200,
+                class_weight="balanced",
+                random_state=42,
+            )),
+        ])
+    else:
+        print("Enhancement: SMOTE disabled")
+        rf_smote = None
 
 
     # ═════════════════════════════════════════════════════════════════════════
@@ -164,16 +177,21 @@ def train_tree_classifier(df_deep, df_labels_matched,
     # Start from sklearn's "balanced" weights then multiply ponderosa by 2×
     # so the 20-sample class is pushed harder than balanced alone achieves.
     # ═════════════════════════════════════════════════════════════════════════
-    classes_arr  = np.array(sorted(y.unique()))
-    bal_weights  = compute_class_weight("balanced", classes=classes_arr, y=y)
-    weight_dict  = dict(zip(classes_arr, bal_weights))
-    weight_dict["ponderosa"] = weight_dict.get("ponderosa", 1.0) * 2.0
+    if ENHANCEMENTS["WEIGHTING"]:
+        print("Enhancement: WEIGHTING enabled")
+        classes_arr = np.array(sorted(y.unique()))
+        bal_weights = compute_class_weight("balanced", classes=classes_arr, y=y)
+        weight_dict = dict(zip(classes_arr, bal_weights))
+        weight_dict["ponderosa"] = weight_dict.get("ponderosa", 1.0) * 2.0
 
-    rf_weighted = RandomForestClassifier(
-        n_estimators=200,
-        class_weight=weight_dict,
-        random_state=42,
-    )
+        rf_weighted = RandomForestClassifier(
+            n_estimators=200,
+            class_weight=weight_dict,
+            random_state=42,
+        )
+    else:
+        print("Enhancement: WEIGHTING disabled")
+        rf_weighted = None
 
 
     # ═════════════════════════════════════════════════════════════════════════
@@ -182,32 +200,36 @@ def train_tree_classifier(df_deep, df_labels_matched,
     # then retrain a clean RF on the reduced feature set. The selected feature
     # list is printed so you can hardcode survivors into FEATURES permanently.
     # ═════════════════════════════════════════════════════════════════════════
-    selector_rf = RandomForestClassifier(
-        n_estimators=200, class_weight="balanced", random_state=42
-    )
-    selector = SelectFromModel(selector_rf, threshold="mean")
-    selector.fit(X_train, y_train)
+    if ENHANCEMENTS["SELECTION"]:
+        print("Enhancement: SELECTION enabled")
+        selector_rf = RandomForestClassifier(
+            n_estimators=200, class_weight="balanced", random_state=42
+        )
+        selector = SelectFromModel(selector_rf, threshold="mean")
+        selector.fit(X_train, y_train)
 
-    selected_features = [f for f, keep
-                         in zip(available, selector.get_support()) if keep]
-    dropped_features  = [f for f, keep
-                         in zip(available, selector.get_support()) if not keep]
+        selected_features = [f for f, keep
+                             in zip(available, selector.get_support()) if keep]
+        dropped_features  = [f for f, keep
+                             in zip(available, selector.get_support()) if not keep]
 
-    print(f"Feature selection: {len(selected_features)} kept, "
-          f"{len(dropped_features)} dropped")
-    print(f"  Kept:    {selected_features}")
-    print(f"  Dropped: {dropped_features}")
-    print()
+        print(f"  {len(selected_features)} kept:    {selected_features}")
+        print(f"  {len(dropped_features)} dropped: {dropped_features}")
+        print()
 
-    X_train_sel = X_train[selected_features]
-    X_test_sel  = X_test[selected_features]
-    X_sel       = X[selected_features]
+        X_train_sel = X_train[selected_features]
+        X_test_sel  = X_test[selected_features]
+        X_sel       = X[selected_features]
 
-    rf_selected = RandomForestClassifier(
-        n_estimators=200,
-        class_weight="balanced",
-        random_state=42,
-    )
+        rf_selected = RandomForestClassifier(
+            n_estimators=200,
+            class_weight="balanced",
+            random_state=42,
+        )
+    else:
+        print("Enhancement: SELECTION disabled")
+        selected_features = None
+        rf_selected       = None
 
 
     # ═════════════════════════════════════════════════════════════════════════
@@ -217,32 +239,40 @@ def train_tree_classifier(df_deep, df_labels_matched,
     # is an independent comparison. n_iter=30 gives good coverage without
     # the cost of a full grid search.
     # ═════════════════════════════════════════════════════════════════════════
-    param_dist = {
-        "n_estimators":      [100, 200, 300, 500],
-        "max_depth":         [None, 5, 10, 15, 20],
-        "min_samples_leaf":  [1, 2, 4, 6],
-        "min_samples_split": [2, 5, 10],
-        "max_features":      ["sqrt", "log2", 0.5],
-    }
+    # ENHANCEMENT 4 — Hyperparameter tuning
+    # RandomizedSearchCV over the RF params most likely to matter on a small
+    # dataset. n_iter=30 gives good coverage without a full grid search.
+    # ═════════════════════════════════════════════════════════════════════════
+    if ENHANCEMENTS["TUNING"]:
+        print("Enhancement: TUNING enabled")
+        param_dist = {
+            "n_estimators":      [100, 200, 300, 500],
+            "max_depth":         [None, 5, 10, 15, 20],
+            "min_samples_leaf":  [1, 2, 4, 6],
+            "min_samples_split": [2, 5, 10],
+            "max_features":      ["sqrt", "log2", 0.5],
+        }
 
-    print("Running hyperparameter search (30 iterations × "
-          f"{n_folds} folds)...")
-    tuned_search = RandomizedSearchCV(
-        RandomForestClassifier(class_weight="balanced", random_state=42),
-        param_distributions=param_dist,
-        n_iter=30,
-        cv=cv,
-        scoring="f1_macro",
-        n_jobs=-1,
-        random_state=42,
-        verbose=0,
-    )
-    tuned_search.fit(X_train, y_train)
-    rf_tuned = tuned_search.best_estimator_
+        print(f"  Running hyperparameter search (30 iterations × {n_folds} folds)...")
+        tuned_search = RandomizedSearchCV(
+            RandomForestClassifier(class_weight="balanced", random_state=42),
+            param_distributions=param_dist,
+            n_iter=30,
+            cv=cv,
+            scoring="f1_macro",
+            n_jobs=-1,
+            random_state=42,
+            verbose=0,
+        )
+        tuned_search.fit(X_train, y_train)
+        rf_tuned = tuned_search.best_estimator_
 
-    print(f"  Best params: {tuned_search.best_params_}")
-    print(f"  Best CV F1:  {tuned_search.best_score_:.3f}")
-    print()
+        print(f"  Best params: {tuned_search.best_params_}")
+        print(f"  Best CV F1:  {tuned_search.best_score_:.3f}")
+        print()
+    else:
+        print("Enhancement: TUNING disabled")
+        rf_tuned = None
 
 
     # ── model zoo ─────────────────────────────────────────────────────────────
@@ -277,12 +307,15 @@ def train_tree_classifier(df_deep, df_labels_matched,
             ("scaler", StandardScaler()),
             ("knn",    KNeighborsClassifier(n_neighbors=5)),
         ]),
-        # ── enhanced variants ──────────────────────────────────────────────
-        "RF_SMOTE":    rf_smote,     # enhancement 1
-        "RF_weighted": rf_weighted,  # enhancement 2
-        "RF_tuned":    rf_tuned,     # enhancement 4
-        # RF_selected handled separately below (different feature set)
     }
+
+    # ── add enabled enhanced variants to the model zoo ────────────────────
+    if ENHANCEMENTS["SMOTE"]     and rf_smote    is not None:
+        models["RF_SMOTE"]    = rf_smote
+    if ENHANCEMENTS["WEIGHTING"] and rf_weighted is not None:
+        models["RF_weighted"] = rf_weighted
+    if ENHANCEMENTS["TUNING"]    and rf_tuned    is not None:
+        models["RF_tuned"]    = rf_tuned
 
     # ── evaluate each model ───────────────────────────────────────────────────
     results_summary = []
@@ -320,35 +353,36 @@ def train_tree_classifier(df_deep, df_labels_matched,
         fitted_models[name] = (model, available)
 
     # ── enhancement 3 evaluated separately (reduced feature set) ─────────────
-    print(f"{'─' * 55}")
-    print(f"  RF_selected  ({len(selected_features)} features)")
-    print(f"{'─' * 55}")
+    if ENHANCEMENTS["SELECTION"] and rf_selected is not None:
+        print(f"{'─' * 55}")
+        print(f"  RF_selected  ({len(selected_features)} features)")
+        print(f"{'─' * 55}")
 
-    rf_selected.fit(X_train_sel, y_train)
-    y_pred_sel   = rf_selected.predict(X_test_sel)
-    macro_f1_sel = f1_score(y_test, y_pred_sel, average="macro", zero_division=0)
-    kappa_sel    = cohen_kappa_score(y_test, y_pred_sel)
+        rf_selected.fit(X_train_sel, y_train)
+        y_pred_sel   = rf_selected.predict(X_test_sel)
+        macro_f1_sel = f1_score(y_test, y_pred_sel, average="macro", zero_division=0)
+        kappa_sel    = cohen_kappa_score(y_test, y_pred_sel)
 
-    print(classification_report(y_test, y_pred_sel, zero_division=0))
-    print(f"  Macro F1:      {macro_f1_sel:.3f}")
-    print(f"  Cohen's Kappa: {kappa_sel:.3f}")
+        print(classification_report(y_test, y_pred_sel, zero_division=0))
+        print(f"  Macro F1:      {macro_f1_sel:.3f}")
+        print(f"  Cohen's Kappa: {kappa_sel:.3f}")
 
-    cv_sel = cross_val_score(rf_selected, X_sel, y, cv=cv,
-                             scoring="f1_macro", n_jobs=-1)
-    print(f"  CV Macro F1 ({n_folds}-fold): "
-          f"{cv_sel.mean():.3f} ± {cv_sel.std():.3f}  "
-          f"(folds: {', '.join(f'{s:.3f}' for s in cv_sel)})")
-    print()
+        cv_sel = cross_val_score(rf_selected, X_sel, y, cv=cv,
+                                 scoring="f1_macro", n_jobs=-1)
+        print(f"  CV Macro F1 ({n_folds}-fold): "
+              f"{cv_sel.mean():.3f} ± {cv_sel.std():.3f}  "
+              f"(folds: {', '.join(f'{s:.3f}' for s in cv_sel)})")
+        print()
 
-    results_summary.append({
-        "model":       "RF_selected",
-        "macro_f1":    round(macro_f1_sel, 4),
-        "kappa":       round(kappa_sel, 4),
-        "cv_macro_f1": round(cv_sel.mean(), 4),
-        "cv_std":      round(cv_sel.std(), 4),
-        "features":    f"{len(selected_features)} selected",
-    })
-    fitted_models["RF_selected"] = (rf_selected, selected_features)
+        results_summary.append({
+            "model":       "RF_selected",
+            "macro_f1":    round(macro_f1_sel, 4),
+            "kappa":       round(kappa_sel, 4),
+            "cv_macro_f1": round(cv_sel.mean(), 4),
+            "cv_std":      round(cv_sel.std(), 4),
+            "features":    f"{len(selected_features)} selected",
+        })
+        fitted_models["RF_selected"] = (rf_selected, selected_features)
 
 
     # ── comparison table ──────────────────────────────────────────────────────

@@ -1,21 +1,28 @@
 import numpy as np
-from scipy.ndimage import maximum_filter, label
+from scipy.ndimage import maximum_filter, label, gaussian_filter
 import rasterio.transform
 
 
-def find_chm_peaks(chm, transform, min_height=1.5, search_radius_m=1.5, resolution=0.5):
+def find_chm_peaks(chm, transform, min_height=1.5, search_radius_m=1.5, resolution=0.5,
+                    smooth_sigma=1.0):
     """
     Detect local maxima in a Canopy Height Model raster as candidate tree tops.
- 
+
     Applies scipy.ndimage.maximum_filter with a window sized to search_radius_m
     and marks pixels that equal the local maximum and exceed min_height as peaks.
     Flat-topped regions (multiple equal-valued adjacent pixels) are collapsed to
     their centroid. Pixel indices are converted to UTM coordinates via the
     rasterio transform.
- 
+
+    A Gaussian smoothing pass is applied to the CHM *before* peak detection
+    (smooth_sigma) to suppress spurious secondary peaks within a single crown —
+    e.g. a bifurcated treetop or noisy CHM bump that would otherwise register as
+    two separate trees. Reported peak_heights are still read from the original,
+    unsmoothed CHM so height values aren't distorted by the smoothing.
+
     Returned peak coordinates are used as watershed markers in
     cluster_by_chm_peaks() and as Mean Shift seeds in split_large_clusters().
- 
+
     Args:
         chm (np.ndarray): 2-D float32 CHM array from build_chm().
         transform (rasterio.transform.Affine): Affine transform from build_chm().
@@ -24,32 +31,61 @@ def find_chm_peaks(chm, transform, min_height=1.5, search_radius_m=1.5, resoluti
             at Sunset Crater. Default 1.5.
         search_radius_m (float): Radius in metres of the local maximum filter
             window. Roughly the minimum expected crown radius — two peaks
-            closer than this will be merged. 3.0 m outperformed smaller values
-            at Sunset Crater. Default 1.5.
+            closer than this will be merged into one. Increasing this is the
+            first lever to pull if single crowns are being split into
+            multiple peaks. 3.0 m outperformed smaller values at Sunset
+            Crater. Default 1.5.
         resolution (float): CHM cell size in metres. Must match the value
             used in build_chm(). Default 0.5.
- 
+        smooth_sigma (float): Standard deviation (in pixels) of the Gaussian
+            filter applied to the CHM before peak detection. 0 disables
+            smoothing entirely (reproduces old behaviour exactly). Higher
+            values suppress more secondary bumps within a crown at the cost
+            of also softening genuine closely-spaced peaks. Start at 1.0 and
+            sweep 0.5/1.0/1.5/2.0 against matching score. Default 1.0.
+
     Returns:
         peak_coords (np.ndarray): (N, 2) array of (easting, northing) UTM
             coordinates for each detected tree top.
-        peak_heights (np.ndarray): (N,) array of CHM heights at each peak.
- 
+        peak_heights (np.ndarray): (N,) array of CHM heights at each peak,
+            read from the original unsmoothed CHM.
+
     Requirements:
         numpy, scipy.ndimage, rasterio.transform
     """
 
-    # ── local maximum filter ──────────────────────────────────────────────────
+    # ── Gaussian smoothing (new) ──────────────────────────────────────────────
+    # NaN cells (no-data) would propagate through the Gaussian kernel and wipe
+    # out nearby valid pixels, so they're zeroed before smoothing and the
+    # original NaN mask is re-applied afterward. Smoothing is only used to
+    # decide *where* the peaks are — peak_heights below still reads from the
+    # original chm, not chm_smoothed.
+    nan_mask = np.isnan(chm)
+
+    if smooth_sigma > 0:
+        chm_filled    = np.where(nan_mask, 0.0, chm).astype(np.float32)
+        chm_smoothed  = gaussian_filter(chm_filled, sigma=smooth_sigma)
+        chm_smoothed  = np.where(nan_mask, np.nan, chm_smoothed)
+    else:
+        # sigma=0 reproduces the old, unsmoothed behaviour exactly
+        chm_smoothed = chm
+
+    # ── local maximum filter (now runs on the smoothed CHM) ──────────────────
     # window size in pixels that corresponds to search_radius_m
     window_px = max(3, int(np.ceil(search_radius_m / resolution) * 2 + 1))  # must be odd
 
-    local_max = maximum_filter(chm, size=window_px)
+    local_max = maximum_filter(chm_smoothed, size=window_px)
 
     # a pixel is a peak if it equals the local maximum AND clears min_height
     # also ignore NaN cells (no-data)
+    # NOTE: min_height is checked against the smoothed CHM here, since that's
+    # the array local_max was computed from. Smoothing can shave a small
+    # amount off true peak heights, so if you see legitimate low-height trees
+    # disappearing, lower min_height slightly or reduce smooth_sigma.
     peak_mask = (
-        (chm == local_max) &
-        (chm >= min_height) &
-        (~np.isnan(chm))
+        (chm_smoothed == local_max) &
+        (chm_smoothed >= min_height) &
+        (~np.isnan(chm_smoothed))
     )
 
     # ── suppress duplicate peaks in flat-top regions ─────────────────────────
@@ -66,7 +102,8 @@ def find_chm_peaks(chm, transform, min_height=1.5, search_radius_m=1.5, resoluti
     cols = np.array(cols)
 
     if len(rows) == 0:
-        print("No CHM peaks found — try lowering min_height or search_radius_m.")
+        print("No CHM peaks found — try lowering min_height, search_radius_m, "
+              "or smooth_sigma.")
         return np.empty((0, 2)), np.empty((0,))
 
     # ── convert pixel indices → UTM coordinates ───────────────────────────────
@@ -74,11 +111,15 @@ def find_chm_peaks(chm, transform, min_height=1.5, search_radius_m=1.5, resoluti
     xs, ys = rasterio.transform.xy(transform, rows, cols)
     peak_coords = np.column_stack((xs, ys))
 
-    # height at each peak (nearest-pixel lookup on integer indices)
-    peak_heights = chm[rows.astype(int), cols.astype(int)]
+    # height at each peak — read from the ORIGINAL unsmoothed CHM so reported
+    # heights reflect real data, not the smoothed surface used for detection
+    row_idx = np.clip(rows.astype(int), 0, chm.shape[0] - 1)
+    col_idx = np.clip(cols.astype(int), 0, chm.shape[1] - 1)
+    peak_heights = chm[row_idx, col_idx]
 
     print(f"Found {len(peak_coords)} CHM peaks "
-          f"(min_height={min_height} m, window={window_px} px)")
+          f"(min_height={min_height} m, window={window_px} px, "
+          f"smooth_sigma={smooth_sigma})")
 
     return peak_coords, peak_heights
 
@@ -86,26 +127,26 @@ def find_chm_peaks(chm, transform, min_height=1.5, search_radius_m=1.5, resoluti
 def filter_clusters_by_chm_peaks(clusters, peak_coords, max_distance=3.0):
     """
     Discard clusters that have no CHM peak nearby.
- 
+
     Compares each cluster's XY centroid against the peak coordinate set and
     removes clusters further than max_distance from any peak. Acts as a fast
     pre-filter to eliminate ground patches and shrubs before further processing.
- 
+
     Args:
         clusters (list of o3d.geometry.PointCloud): Clusters to filter.
         peak_coords (np.ndarray): (N, 2) UTM peak coordinates from
             find_chm_peaks().
         max_distance (float): Maximum distance in metres from a cluster
             centroid to the nearest peak. Default 3.0.
- 
+
     Returns:
         list of o3d.geometry.PointCloud: Clusters whose centroid is within
             max_distance of at least one peak.
- 
+
     Requirements:
         numpy, scipy.spatial.KDTree
     """
-    
+
     from scipy.spatial import KDTree
     import numpy as np
 
