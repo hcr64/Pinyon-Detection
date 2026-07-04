@@ -53,6 +53,8 @@ def main():
     parser.add_argument("--k",                 type=int,   required=True)
     parser.add_argument("--min_height",        type=float, required=True)
     parser.add_argument("--search_radius_m",   type=float, required=True)
+    parser.add_argument("--gps_sigma",         type=float, required=True)
+    parser.add_argument("--smooth_sigma",      type=float, required=True)
 
     parser.add_argument("--trial_name", type=str, required=True)
     parser.add_argument("--job_id",     type=str, required=True)
@@ -68,23 +70,20 @@ def main():
     MIN_PEAK_DISTANCE = args.min_peak_distance
     K                 = args.k
 
-    # hard coded for now
     MIN_DENSITY_RATIO = 1.5
-    S_SIGMA           = 1.0
 
     MIN_HEIGHT      = args.min_height
     SEARCH_RADIUS_M = args.search_radius_m
+    GPS_SIGMA       = args.gps_sigma
+    SMOOTH_SIGMA    = args.smooth_sigma
 
-    # non-parameter variables
     TRIAL_NAME = args.trial_name
     JOB_ID     = args.job_id
 
     NORMALIZE_HEIGHTS = True
 
-    # from the constant.py, update for specific trial
     PATHS = get_paths(TRIAL_NAME)
 
-    # print settings
     print()
     print()
     print("#### SETTINGS ####")
@@ -97,6 +96,8 @@ def main():
     print("MIN_PEAK_DISTANCE:", MIN_PEAK_DISTANCE)
     print("K:", K)
     print("MIN_DENSITY_RATIO:", MIN_DENSITY_RATIO)
+    print("GPS_SIGMA:", GPS_SIGMA)
+    print("SMOOTH_SIGMA:", SMOOTH_SIGMA)
 
     K = MIN_POINTS
 
@@ -122,7 +123,6 @@ def main():
         o3d.io.write_point_cloud(f"{ PATHS['Raw_pcd'] }", point_cloud)
         print('Raw point cloud successfully saved.\n')
 
-    # read in from disc, can save ~10 minutes
     else:
         print(f"Reading in raw pointcloud... (from {PATHS['Raw_pcd']})")
         if os.path.exists(os.path.dirname(PATHS['Raw_pcd'])):
@@ -133,7 +133,6 @@ def main():
             return 1
         print()
 
-    # downsize, only needed if making a chm or cleaning, can take several minutes too
     if STEPS['Make_CHM'] or STEPS['Clean_Pointcloud']:
         print("Downsizing pointcloud...")
         point_cloud = point_cloud.voxel_down_sample(voxel_size=VOXEL_SIZE)
@@ -149,8 +148,6 @@ def main():
             save_path=PATHS['CHM']
         )
         print(f"CHM complete. (Saved to {PATHS['CHM']})\n")
-
-    # read in the CHM from disk, can also save several minutes 
     else:
         if os.path.exists(PATHS['CHM']):
             print(f"Loading in CHM... (from { PATHS['CHM'] })")
@@ -160,7 +157,6 @@ def main():
             return 1
         print('CHM loaded in successfully.')
 
-    # can take quite a while, worth skipping if possible
     if STEPS['Make_Clusters']:
         print("Finding peaks in CHM...")
         peak_coords, peak_heights = find_chm_peaks(
@@ -168,7 +164,7 @@ def main():
             transform,
             min_height=MIN_HEIGHT,
             search_radius_m=SEARCH_RADIUS_M,
-            smooth_sigma=S_SIGMA)
+            smooth_sigma=SMOOTH_SIGMA)
         print()
 
     # ── clean pointcloud ──────────────────────────────────────────────────
@@ -285,11 +281,11 @@ def main():
         csv_path_2=os.path.dirname(PATHS['Labels']) + '/sunsetCraterMay26.csv',
         max_distance=MAX_DISTANCE,
         graph_save_path=PATHS['Images'],
-        gps_sigma=4.0,
+        gps_sigma=GPS_SIGMA,
         job_id=JOB_ID,
         clusters=clusters,
         multi_match_save_path=PATHS["MM_save_path"],
-        graph_subtitle=f"EPS:{EPS}-MR:{MAX_RADIUS}-GT:{GREEN_THRESHOLD}-MPts:{MIN_POINTS}-MD:{MAX_DISTANCE}-K:{K}-MPD:{MIN_PEAK_DISTANCE}"
+        graph_subtitle=f"EPS:{EPS}-MR:{MAX_RADIUS}-GT:{GREEN_THRESHOLD}-MPts:{MIN_POINTS}-MD:{MAX_DISTANCE}-K:{K}-MPD:{MIN_PEAK_DISTANCE}-GPSs:{GPS_SIGMA}-SMs:{SMOOTH_SIGMA}"
     )
     print("Labels assigned.\n")
 
@@ -322,6 +318,8 @@ def main():
             "k":                 K,
             "min_height":        MIN_HEIGHT,
             "search_radius_m":   SEARCH_RADIUS_M,
+            "gps_sigma":         GPS_SIGMA,
+            "smooth_sigma":      SMOOTH_SIGMA,
             "normalize_heights": NORMALIZE_HEIGHTS,
             "matching_score":    score,
         }

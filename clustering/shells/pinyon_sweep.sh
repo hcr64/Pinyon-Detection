@@ -2,7 +2,7 @@
 #SBATCH --job-name=pinyon_sweep
 #SBATCH --output=logs/job_%A_%a.out
 #SBATCH --error=logs/job_%A_%a.err
-#SBATCH --array=1-16
+#SBATCH --array=1-10
 #SBATCH --time=02:00:00
 #SBATCH --mem=92G
 #SBATCH --partition=core
@@ -28,8 +28,10 @@ MIN_PEAK_DISTANCE=$(echo $PARAMS | awk '{print $7}')
 K=$(                echo $PARAMS | awk '{print $8}')
 MIN_HEIGHT=$(       echo $PARAMS | awk '{print $9}')
 SEARCH_RADIUS_M=$(  echo $PARAMS | awk '{print $10}')
+GPS_SIGMA=$(        echo $PARAMS | awk '{print $11}')
+SMOOTH_SIGMA=$(     echo $PARAMS | awk '{print $12}')
 
-echo "Task ${SLURM_ARRAY_TASK_ID}: eps=$EPS green=$GREEN crown=$RADIUS max_dist=$MAX_DISTANCE min_pts=$MIN_POINTS voxel=$VOXEL_SIZE mpd=$MIN_PEAK_DISTANCE k=$K min_h=$MIN_HEIGHT sr=$SEARCH_RADIUS_M"
+echo "Task ${SLURM_ARRAY_TASK_ID}: eps=$EPS green=$GREEN crown=$RADIUS max_dist=$MAX_DISTANCE min_pts=$MIN_POINTS voxel=$VOXEL_SIZE mpd=$MIN_PEAK_DISTANCE k=$K min_h=$MIN_HEIGHT sr=$SEARCH_RADIUS_M gps_sigma=$GPS_SIGMA smooth_sigma=$SMOOTH_SIGMA"
 
 # sweeps only ever needed clustering + GPS matching score — never the
 # classifier comparison, which used to run (and clutter these logs) on
@@ -45,5 +47,7 @@ python -u run_clustering.py \
     --k                $K \
     --min_height       $MIN_HEIGHT \
     --search_radius_m  $SEARCH_RADIUS_M \
+    --gps_sigma        $GPS_SIGMA \
+    --smooth_sigma     $SMOOTH_SIGMA \
     --job_id           $SLURM_JOB_ID \
     --trial_name       $TRIAL_NAME

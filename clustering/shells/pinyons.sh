@@ -40,6 +40,12 @@ MIN_HEIGHT=1.0
 # local max window radius for find_chm_peaks — 2.5 gave best score (0.771)
 SEARCH_RADIUS_M=3.0
 
+# assumed 1-sigma GPS horizontal error (m) for the Gaussian label-matching cost
+GPS_SIGMA=4.0
+
+# Gaussian smoothing (px) applied to CHM before peak detection
+SMOOTH_SIGMA=1.0
+
 # clear out the image & log folders before it start
 # find trial_data/$TRIAL_NAME/logs/* -mmin +15 -type f -delete
 # find trial_data/$TRIAL_NAME/images/* -mmin +15 -type f -delete
@@ -51,7 +57,7 @@ echo "Task ${SLURM_ARRAY_TASK_ID}: eps=$EPS green=$GREEN crown=$RADIUS max_dist=
 
 # clustering + GPS labeling only. Run train_model.sh (or `python
 # train_model.py --trial_name $TRIAL_NAME`) separately once this finishes.
-python -u run_clustering.py \
+python -u clustering/run_clustering.py \
     --eps               $EPS \
     --green_threshold   $GREEN \
     --max_radius        $RADIUS \
@@ -62,5 +68,7 @@ python -u run_clustering.py \
     --k                 $K \
     --min_height        $MIN_HEIGHT \
     --search_radius_m   $SEARCH_RADIUS_M \
+    --gps_sigma         $GPS_SIGMA \
+    --smooth_sigma      $SMOOTH_SIGMA \
     --job_id            $SLURM_JOB_ID \
     --trial_name        $TRIAL_NAME

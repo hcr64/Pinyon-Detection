@@ -16,16 +16,6 @@ from .detection.cluster_pointcloud import cluster_pointcloud
 from .detection.split_large_clusters import split_large_clusters, filter_cluster
 from .detection.filter_green_crown import filter_clusters_by_green_crown
 
-# features
-from .features.get_pointcloud_stats import clusters_to_dataframe
-from .features.get_deep_cluster_features import make_deep_dataframe, engineer_features
-from .features.plot_feature_separability import plot_feature_separability
-
 # labeling
 from .labeling.match_labels_to_clusters import match_labels_to_clusters
 from .labeling.save_multimatch_clusters import save_multimatch_clusters
-
-# classification
-from .classification.train_tree_classifier import train_tree_classifier
-from .classification.advanced_classifiers import run_advanced_classifiers
-from .classification.semi_supervised import run_label_spreading
