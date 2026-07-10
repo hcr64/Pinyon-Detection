@@ -57,7 +57,7 @@ def get_paths(trial_name, scratch_dir='/scratch/hcr64/Pinyon-Detection/'):
         'CHM':              trial_dir + 'CFMs/chm.tif',
         'Labels':           trial_dir + 'labels/sunset-sfm.csv',
         'Images':           trial_dir + 'images/',
-        'GPS_results':      trial_dir + 'results/results_June8.csv',
+        'GPS_results':      trial_dir + 'results/results_Jul4.csv',
         'Clusters':         trial_dir + 'clusters/',
         'Labeled_clusters': trial_dir + 'labeled_clusters/',
         'Dataframes':       trial_dir + 'dataframes/',

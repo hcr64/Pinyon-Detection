@@ -1,22 +1,23 @@
 #!/bin/bash
 #SBATCH --job-name=pinyon_sweep
-#SBATCH --output=logs/job_%A_%a.out
-#SBATCH --error=logs/job_%A_%a.err
-#SBATCH --array=1-10
+#SBATCH --output=clustering/logs/job_%A_%a.out
+#SBATCH --error=clustering/logs/job_%A_%a.err
+#SBATCH --chdir=/home/hcr64/Pinyon-Detection/
+#SBATCH --array=1-30
 #SBATCH --time=02:00:00
 #SBATCH --mem=92G
 #SBATCH --partition=core
 
-source /home/hcr64/Pinyon-Detection/open3d_env/bin/activate
+source open3d_env/bin/activate
 
 TRIAL_NAME="Sunset_sfm_trial"
 
 # clear out logs and images folder before beginning
-find trial_data/$TRIAL_NAME/logs/* -mmin +15 -type f -delete
-find trial_data/$TRIAL_NAME/images/* -mmin +15 -type f -delete
+find trial_data/logs/* -mmin +15 -type f -delete
+find trial_data/images/* -mmin +15 -type f -delete
 
 # skip comment and blank lines, then get row SLURM_ARRAY_TASK_ID
-PARAMS=$(grep -v '^\s*#' parameters/params.txt | grep -v '^\s*$' | sed -n "${SLURM_ARRAY_TASK_ID}p")
+PARAMS=$(grep -v '^\s*#' clustering/parameters/params.txt | grep -v '^\s*$' | sed -n "${SLURM_ARRAY_TASK_ID}p")
 
 EPS=$(             echo $PARAMS | awk '{print $1}')
 GREEN=$(            echo $PARAMS | awk '{print $2}')
@@ -36,7 +37,7 @@ echo "Task ${SLURM_ARRAY_TASK_ID}: eps=$EPS green=$GREEN crown=$RADIUS max_dist=
 # sweeps only ever needed clustering + GPS matching score — never the
 # classifier comparison, which used to run (and clutter these logs) on
 # every single array task via the old main.py
-python -u run_clustering.py \
+python -u clustering/run_clustering.py \
     --eps              $EPS \
     --green_threshold  $GREEN \
     --max_radius       $RADIUS \

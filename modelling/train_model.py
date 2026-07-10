@@ -83,6 +83,17 @@ def main():
         )
         print("Label spreading complete.")
 
+        # evaluate semi supervised model 
+        from functions.classification.evaluate_semi_supervised import run_full_evaluation
+        run_full_evaluation(
+            df_deep_clusters,
+            df_clusters,
+            save_path=PATHS['Images'],
+            alpha=0.2,
+            gamma=0.5,
+            confidence_threshold=0.80,
+        )
+
     if "prob_pinyon" in df_deep_clusters.columns:
         confirmed_pinyons = df_deep_clusters[
             (df_deep_clusters["predicted_label"] == "pinyon") &

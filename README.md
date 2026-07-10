@@ -1,8 +1,30 @@
 # Pinyon-Detection
 
-A research pipeline for detecting and classifying pinyon, juniper, and ponderosa pine trees from drone-collected LiDAR/SfM point clouds. Developed for the **Sunset Crater** field site (Sunset_sfm_trial) and designed to run on the **Monsoon** SLURM HPC cluster.
+A research pipeline for detecting and classifying pinyon, juniper, and
+ponderosa pine trees from drone-collected LiDAR/SfM point clouds. Developed
+for the **Sunset Crater** field site (`Sunset_sfm_trial`) and designed to run
+on the **Monsoon** SLURM HPC cluster.
 
-The pipeline ingests raw `.las` files, builds a Canopy Height Model, detects tree tops as CHM peaks, segments individual crowns via watershed, and trains a species classifier on GPS-labeled clusters.
+The pipeline ingests raw `.las` files, builds a Canopy Height Model, detects
+tree tops as CHM peaks, segments individual crowns via watershed, matches
+GPS-tagged ground-truth species to clusters, and trains a species classifier
+on the labeled subset.
+
+It's split into two independent stages:
+
+- **`clustering/`** — everything expensive: point cloud processing, CHM,
+  watershed segmentation, GPS label matching. Run via `run_clustering.py`,
+  usually swept over many parameter combinations to optimize the matching
+  score. See [`clustering/README.md`](clustering/README.md).
+- **`modelling/`** — species classification on the labeled clusters
+  `clustering/` produced. Run via `train_model.py`, fast enough to iterate
+  on interactively. See [`modelling/README.md`](modelling/README.md).
+
+These used to be one script (`main.py`). They were split apart because sweep
+jobs only ever needed the clustering half, and running a full classifier
+comparison on every sweep array task was cluttering logs for no benefit —
+the labeled set doesn't change between clustering-parameter sweep
+iterations.
 
 ---
 
@@ -10,43 +32,42 @@ The pipeline ingests raw `.las` files, builds a Canopy Height Model, detects tre
 
 ```
 Pinyon-Detection/
-├── main.py                  # Entry point — orchestrates the full pipeline
-├── constants.py             # File paths, pipeline step flags, global settings
+├── README.md                 # this file
+├── PIPELINE.md                # detailed stage-by-stage walkthrough
 │
-├── functions/               # All pipeline logic, organized by stage
-│   ├── io/                  # Loading, saving, and converting data
-│   ├── preprocessing/       # Point cloud cleaning, CHM building, ground stripping
-│   ├── detection/           # CHM peak finding, crown segmentation, cluster splitting
-│   ├── features/            # Per-cluster feature extraction for the classifier
-│   ├── labeling/            # GPS label matching and scoring
-│   └── classification/      # Model training and species prediction
+├── clustering/
+│   ├── run_clustering.py      # entry point — clustering + GPS labeling
+│   ├── constants.py           # STEPS flags, get_paths(trial_name)
+│   ├── functions/              # io, preprocessing, detection, labeling
+│   ├── shells/                 # pinyons.sh, pinyon_sweep.sh, Drive sync scripts
+│   └── parameters/             # params.txt sweep grids
 │
-├── shells/                  # SLURM job scripts and utilities
-│   ├── pinyons.sh           # Single main run
-│   ├── pinyon_sweep.sh      # Parameter sweep (job array)
-│   ├── save_clusters_to_drive.sh
+├── modelling/
+│   ├── train_model.py         # entry point — classifier training
+│   └── functions/              # features, classification
+│
+├── shells/                    # cross-cutting utilities
+│   ├── train_model.sh
 │   ├── setup_venv.sh
 │   ├── debug.sh
-│   └── see_recent_jobs.sh
-│
-├── parameters/
-│   └── params.txt           # Parameter grid for sweep jobs
+│   ├── see_recent_jobs.sh
+│   └── clear_garbage_files.sh
 │
 ├── trial_data/
 │   └── Sunset_sfm_trial/
-│       ├── data/point_cloud/    # Raw .las input files
-│       ├── pointclouds/         # Saved raw and cleaned .ply files
+│       ├── data/point_cloud/    # raw .las input files
+│       ├── pointclouds/         # saved raw and cleaned .ply files
 │       ├── CFMs/                # Canopy Height Model GeoTIFFs
-│       ├── clusters/            # Segmented tree clusters (.ply)
-│       ├── labeled_clusters/    # Clusters with GPS species labels
+│       ├── clusters/            # segmented tree clusters (.ply)
+│       ├── labeled_clusters/    # clusters with GPS species labels
+│       ├── multi_match_clusters/# clusters behind ambiguous GPS matches
 │       ├── labels/              # GPS label CSVs
-│       ├── images/              # Diagnostic plots
-│       └── results/             # Sweep result CSVs
+│       ├── dataframes/          # cached df_clusters / df_deep_clusters
+│       ├── images/              # diagnostic plots
+│       └── results/             # sweep result CSVs
 │
-└── results/                 # Aggregate result CSVs across sweeps
+└── results/                   # legacy aggregate CSVs from early manual trials
 ```
-
-See [`PIPELINE.md`](PIPELINE.md) for a walkthrough of the full processing flow.
 
 ---
 
@@ -59,76 +80,44 @@ bash shells/setup_venv.sh
 source open3d_env/bin/activate
 ```
 
-Requires Python 3.10. Key dependencies: `open3d`, `numpy`, `scipy`, `scikit-learn`, `rasterio`, `scikit-image`, `laspy`, `pyproj`, `pandas`, `matplotlib`.
+Requires Python 3.10. Key dependencies: `open3d`, `numpy`, `scipy`,
+`scikit-learn`, `rasterio`, `scikit-image`, `laspy`, `pyproj`, `pandas`,
+`matplotlib`. For `modelling/`'s `--advanced` flag, also install `xgboost`
+and `lightgbm` (not in `setup_venv.sh` yet).
 
 ### 2. Configure paths and steps
 
-Edit `constants.py` to set:
-- `TRIAL_NAME` — the subfolder under `trial_data/` to use
-- `PATHS` — all input/output file paths (derived from `TRIAL_NAME`)
-- `STEPS` — boolean flags controlling which pipeline stages run
+Edit `clustering/constants.py`:
+- `get_paths(trial_name)` — all input/output paths, derived from the trial name
+- `STEPS` — boolean flags controlling which clustering stages re-run
 
-### 3. Single run
-
-```bash
-sbatch shells/pinyons.sh
-```
-
-Or run directly (adjust parameters inline in the script first):
+### 3. Run clustering + labeling
 
 ```bash
-python -u main.py \
-    --eps 2.0 \
-    --green_threshold 0.025 \
-    --max_radius 3.0 \
-    --max_distance 4.0 \
-    --min_points 200 \
-    --voxel_size 0.08 \
-    --min_peak_distance 3.0 \
-    --k 40 \
-    --min_height 1.0 \
-    --search_radius_m 3.0 \
-    --job_id test \
-    --trial_name Sunset_sfm_trial
+sbatch clustering/shells/pinyons.sh
 ```
 
-### 4. Parameter sweep
+See [`clustering/README.md`](clustering/README.md) for CLI args, the
+`params.txt` sweep format, and current known quirks (a couple of
+CLI params don't do what their names suggest yet — worth reading before
+you burn a sweep on the wrong one).
 
-Edit `parameters/params.txt` (one parameter set per line), update the `--array` count in `pinyon_sweep.sh`, then:
+### 4. Train the classifier
 
 ```bash
-sbatch shells/pinyon_sweep.sh
+sbatch shells/train_model.sh
 ```
 
-Results append to `trial_data/Sunset_sfm_trial/results/newester_results.csv`.
-
----
-
-## Key Parameters
-
-| Parameter | Description | Tuned value |
-|---|---|---|
-| `voxel_size` | Downsampling cell size (m) | 0.08 |
-| `green_threshold` | Minimum green channel dominance for vegetation filter | 0.025 |
-| `min_height` | Minimum CHM height to count as a tree peak (m) | 1.0 |
-| `search_radius_m` | Local max window radius for peak detection (m) | 3.0 |
-| `max_radius` | Maximum crown radius for watershed assignment (m) | 3.0–4.0 |
-| `max_distance` | Maximum GPS-to-cluster distance for label matching (m) | 2.85–4.0 |
-| `min_points` | Minimum points per valid cluster | 200 |
-| `min_peak_distance` | Minimum trunk-to-trunk distance for cluster splitting (m) | 3.0 |
-| `eps` | DBSCAN epsilon — unused with CHM method, keep at 2.0 | 2.0 |
-
-**Findings from parameter sweeps:**
-- `normalize_heights=False` consistently outperformed `True`
-- `voxel_size=0.1` outperformed `0.08`; `eps=2.0` outperformed `2.5`
-- `max_distance ≈ 2.85` is generally optimal for label matching
-- `min_points` in the 35–50 range (pre-CHM clustering) or ~200 (post-CHM) for valid detections
+See [`modelling/README.md`](modelling/README.md) for the enhancement
+toggles, the `--advanced` classifier comparison, and semi-supervised label
+spreading.
 
 ---
 
 ## Matching Score
 
-The pipeline reports a **matching score** after each run: the fraction of GPS-labeled trees that have exactly one cluster within `max_distance`. A perfect score is 1.0; the best achieved on Sunset Crater is **~0.83**.
+`clustering/`'s output metric: the fraction of GPS-labeled trees with
+exactly one detected cluster within `max_distance`.
 
 ```
 Perfect matches (1:1):  58  (82.9%)
@@ -137,24 +126,34 @@ Multiple clusters:        4   (5.7%)
 Matching score:         0.829
 ```
 
+Best achieved on Sunset Crater so far: **~0.83**.
+
+---
+
+## The Data Bottleneck
+
+The labeled dataset is small — **~166 labeled clusters**, with **ponderosa
+at only ~20 samples**. This has been the fundamental constraint on
+classifier performance; no model architecture, oversampling, weighting, or
+feature engineering approach tried so far has overcome it. More labeled
+ground-truth data, not a better classifier, is the highest-leverage next
+step for the modelling side.
+
 ---
 
 ## Field Site
 
-**Sunset Crater**, Arizona. The scan area covers a cinder cone with significant terrain variation (~30 m relief). The irregular drone flight path means coverage is not a uniform rectangle — a `coverage_radius` proximity filter in the label matcher handles the non-rectangular footprint.
+**Sunset Crater**, Arizona. The scan area covers a cinder cone with
+significant terrain variation (~30 m relief). The irregular drone flight
+path means coverage is not a uniform rectangle — a `coverage_radius`
+proximity filter in the label matcher handles the non-rectangular footprint.
 
 Species present: pinyon pine, juniper, ponderosa pine.
 
 ---
 
-## Debugging
+## See Also
 
-```bash
-# Check a specific SLURM job
-bash shells/debug.sh <JOB_ID>
-
-# View recent pinyon jobs
-bash shells/see_recent_jobs.sh
-```
-
-Diagnostic plots (GPS vs cluster overlap, species scatter) are saved to `trial_data/Sunset_sfm_trial/images/` after each run.
+- [`PIPELINE.md`](PIPELINE.md) — detailed walkthrough of every pipeline stage
+- [`clustering/README.md`](clustering/README.md) — clustering/labeling details, params.txt format, known quirks
+- [`modelling/README.md`](modelling/README.md) — classifier details, enhancement toggles, known quirks

@@ -2,9 +2,9 @@
 #SBATCH --job-name=pinyon_main
 #SBATCH --output=/scratch/hcr64/%j.txt
 #SBATCH --error=/scratch/hcr64/%j.err
-#SBATCH --chdir=/home/hcr64/Pinyon-Detection
+#SBATCH --chdir=/home/hcr64/Pinyon-Detection/
 #SBATCH --time=3:00:00
-#SBATCH --mem=96G
+#SBATCH --mem=64G
 
 source /home/hcr64/Pinyon-Detection/open3d_env/bin/activate
 

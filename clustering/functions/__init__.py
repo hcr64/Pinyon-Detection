@@ -19,3 +19,10 @@ from .detection.filter_green_crown import filter_clusters_by_green_crown
 # labeling
 from .labeling.match_labels_to_clusters import match_labels_to_clusters
 from .labeling.save_multimatch_clusters import save_multimatch_clusters
+
+# include the dataframe making files
+import sys
+sys.path.insert(0, "/home/hcr64/Pinyon-Detection")
+
+from modelling.functions.features.get_deep_cluster_features import make_deep_dataframe, engineer_features
+from modelling.functions.features.get_pointcloud_stats import clusters_to_dataframe
