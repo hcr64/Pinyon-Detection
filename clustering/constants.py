@@ -28,9 +28,6 @@ STEPS = {
     # A few seconds at most
     'Cluster_accuracy':True,
     
-    # if a model should be trained
-    # not very time consuming, usually a few seconds or less
-    'Train_Model':True
 }
 
 # path builder 
@@ -47,20 +44,29 @@ def get_paths(trial_name, scratch_dir='/scratch/hcr64/Pinyon-Detection/'):
     Returns:
         dict: Path strings keyed by role (Data, Raw_pcd, CHM, etc.)
     """
-    trial_dir = f'/home/hcr64/Pinyon-Detection/trial_data/{trial_name}/'
+    local_trial_dir = f'/home/hcr64/Pinyon-Detection/clustering/trial_data/{trial_name}/'
+    scratch_dir=f'/scratch/hcr64/Pinyon-Detection/data/{trial_name}/'
 
     return {
-        'Data':             scratch_dir + f'data/{trial_name}/point_cloud/',
-        'Pointclouds':      trial_dir + 'pointclouds/',
-        'Raw_pcd':          trial_dir + 'pointclouds/raw_pcd.ply',
-        'Cleaned_pcd':      trial_dir + 'pointclouds/cleaned_pcd.ply',
-        'CHM':              trial_dir + 'CFMs/chm.tif',
-        'Labels':           trial_dir + 'labels/sunset-sfm.csv',
-        'Images':           trial_dir + 'images/',
-        'GPS_results':      trial_dir + 'results/results_Jul4.csv',
-        'Clusters':         trial_dir + 'clusters/',
-        'Labeled_clusters': trial_dir + 'labeled_clusters/',
-        'Dataframes':       trial_dir + 'dataframes/',
-        'MM_save_path':     trial_dir + 'multi_match_clusters/'
+
+        # scratch folder paths
+        'Data':             scratch_dir + 'point_cloud/',
+        'DSM':              scratch_dir + '1_dsm/',
+
+        'Pointclouds':      scratch_dir + 'pointclouds/',
+        'Raw_pcd':          scratch_dir + 'pointclouds/raw_pcd.ply',
+        'Cleaned_pcd':      scratch_dir + 'pointclouds/cleaned_pcd.ply',
+        'CHM':              scratch_dir + 'CFMs/chm.tif',
+        'Clusters':         scratch_dir + 'clusters/',
+        'PS_clusters':      scratch_dir + 'pre_split_clusters/',
+        'Labeled_clusters': scratch_dir + 'labeled_clusters/',
+        'MM_save_path':     scratch_dir + 'multi_match_clusters/',
+
+
+        # local folder paths
+        'Labels':           local_trial_dir + 'labels/sunset-sfm.csv',
+        'Images':           local_trial_dir + 'images/',
+        'GPS_results':      local_trial_dir + 'results/results_Jul4.csv',
+        'Dataframes':       local_trial_dir + 'dataframes/',
     }
 

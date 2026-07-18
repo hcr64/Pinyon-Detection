@@ -8,6 +8,174 @@ from rasterio.crs import CRS
 import os
 
 
+# ── external DSM ingestion (PixMapper4D or similar photogrammetry output) ────
+
+def build_chm_from_external_dsm(
+    dsm_path,
+    point_cloud=None,
+    dtm_path=None,
+    ground_percentile=5,
+    save_path=None,
+):
+    """
+    Build a CHM using a DSM produced externally by photogrammetry software
+    (e.g. PixMapper4D's 1_dsm/*.tif) instead of build_chm()'s own per-cell
+    max-Z DSM computed from the raw point cloud.
+
+    Why: PixMapper4D's DSM comes from the full densified point cloud/mesh
+    with proper interpolation and gap-filling, and is generally more
+    accurate than a coarse groupby-max on a voxel-downsampled cloud. This
+    keeps CHM = DSM - DTM but lets you plug in the externally-produced DSM.
+
+    Two DTM modes:
+        1. dtm_path given — reads a second GeoTIFF (e.g. from PixMapper4D's
+           optional DTM export) and reprojects it onto the DSM's grid if
+           resolution/extent differ.
+        2. dtm_path is None — computes a DTM the same way build_chm() does
+           (low Z-percentile per cell) but rasterized onto the *external
+           DSM's* grid. Requires `point_cloud`.
+
+    A bounds-overlap sanity check runs whenever point_cloud is provided,
+    since PixMapper4D and your .las exports could in principle disagree on
+    CRS/UTM zone — this would silently produce a CHM that doesn't line up
+    with your point cloud, so it's flagged rather than assumed away.
+
+    Args:
+        dsm_path (str): Path to the external DSM GeoTIFF, e.g.
+            ".../1_dsm/dsm.tif" from a PixMapper4D export.
+        point_cloud (o3d.geometry.PointCloud | None): Raw point cloud.
+            Required if dtm_path is None (mode 2); also used for the
+            bounds sanity check if provided in mode 1. Must be in the same
+            CRS/units as the DSM (UTM metres — EPSG:26912 for Sunset Crater).
+        dtm_path (str | None): Path to an external DTM GeoTIFF, if
+            available. Default None.
+        ground_percentile (int): Ground Z percentile used in mode 2 only.
+            Default 5 — matches build_chm()'s default.
+        save_path (str | None): Where to save the resulting CHM GeoTIFF.
+            Default None (skip saving).
+
+    Returns:
+        chm (np.ndarray): 2-D float32 CHM array, same shape as the DSM.
+        transform (rasterio.transform.Affine): DSM's affine transform.
+        crs (rasterio.crs.CRS): DSM's CRS.
+
+    Requirements:
+        numpy, pandas, rasterio, rasterio.warp, open3d (mode 2 / bounds check)
+    """
+    from rasterio.warp import reproject, Resampling
+
+    # ── read the external DSM ──────────────────────────────────────────────
+    with rasterio.open(dsm_path) as src:
+        dsm       = src.read(1).astype(np.float32)
+        transform = src.transform
+        crs       = src.crs
+        n_rows, n_cols = dsm.shape
+        nodata    = src.nodata
+
+    if nodata is not None:
+        dsm = np.where(dsm == nodata, np.nan, dsm)
+
+    print(f"External DSM loaded: {dsm_path}  ({n_cols}×{n_rows} px, crs={crs})")
+
+    # ── bounds sanity check (catches CRS/UTM-zone mismatches early) ──────────
+    points = None
+    if point_cloud is not None:
+        points = np.asarray(point_cloud.points)
+        px_min, py_min = points[:, 0].min(), points[:, 1].min()
+        px_max, py_max = points[:, 0].max(), points[:, 1].max()
+        dsm_left,  dsm_top    = transform * (0, 0)
+        dsm_right, dsm_bottom = transform * (n_cols, n_rows)
+
+        print(f"Point cloud bounds: x=[{px_min:.1f}, {px_max:.1f}]  y=[{py_min:.1f}, {py_max:.1f}]")
+        print(f"DSM bounds:         x=[{dsm_left:.1f}, {dsm_right:.1f}]  y=[{dsm_bottom:.1f}, {dsm_top:.1f}]")
+
+        overlap = (px_min <= dsm_right and px_max >= dsm_left and
+                   py_min <= dsm_top   and py_max >= dsm_bottom)
+        if not overlap:
+            print("⚠  WARNING: point cloud and DSM bounding boxes do not overlap. "
+                  "Check that both are in the same CRS (expected UTM zone 12N / "
+                  "EPSG:26912) — PixMapper4D may have exported in a different "
+                  "CRS than your .las files.")
+
+    # ── get the DTM ────────────────────────────────────────────────────────
+    if dtm_path is not None:
+        print(f"Using external DTM: {dtm_path}")
+        with rasterio.open(dtm_path) as src:
+            dtm_raw       = src.read(1).astype(np.float32)
+            dtm_transform = src.transform
+            dtm_crs       = src.crs
+            dtm_nodata    = src.nodata
+
+        if dtm_nodata is not None:
+            dtm_raw = np.where(dtm_raw == dtm_nodata, np.nan, dtm_raw)
+
+        if (dtm_transform == transform and dtm_crs == crs
+                and dtm_raw.shape == dsm.shape):
+            dtm = dtm_raw
+        else:
+            print("DTM grid differs from DSM grid — reprojecting DTM onto DSM grid...")
+            dtm = np.full((n_rows, n_cols), np.nan, dtype=np.float32)
+            reproject(
+                source=dtm_raw,
+                destination=dtm,
+                src_transform=dtm_transform,
+                src_crs=dtm_crs,
+                dst_transform=transform,
+                dst_crs=crs,
+                resampling=Resampling.bilinear,
+            )
+
+    else:
+        if point_cloud is None:
+            raise ValueError(
+                "build_chm_from_external_dsm: no dtm_path given, so a "
+                "point_cloud is required to compute the DTM (mode 2)."
+            )
+
+        print("No external DTM provided — computing DTM from point cloud "
+              f"on the DSM's grid ({ground_percentile}th percentile)...")
+
+        x, y, z = points[:, 0], points[:, 1], points[:, 2]
+
+        rows, cols = rasterio.transform.rowcol(transform, x, y)
+        rows = np.array(rows)
+        cols = np.array(cols)
+
+        in_bounds = (rows >= 0) & (rows < n_rows) & (cols >= 0) & (cols < n_cols)
+        rows, cols, z_in = rows[in_bounds], cols[in_bounds], z[in_bounds]
+
+        if in_bounds.sum() == 0:
+            raise ValueError(
+                "No point cloud points fall inside the DSM raster bounds — "
+                "see the bounds warning above, this is almost certainly a "
+                "CRS mismatch."
+            )
+
+        df = pd.DataFrame({"row": rows, "col": cols, "z": z_in})
+        dtm_series = df.groupby(["row", "col"])["z"].quantile(ground_percentile / 100.0)
+
+        dtm = np.full((n_rows, n_cols), np.nan, dtype=np.float32)
+        for (r, c), val in dtm_series.items():
+            dtm[r, c] = val
+
+    # ── CHM = DSM - DTM, clipped to [0, inf) ─────────────────────────────────
+    chm = np.where(np.isnan(dsm) | np.isnan(dtm), np.nan, dsm - dtm).astype(np.float32)
+    chm = np.where(np.isnan(chm), np.nan, np.clip(chm, 0, None))
+
+    # ── optional save ────────────────────────────────────────────────────────
+    if save_path is not None:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True) if os.path.dirname(save_path) else None
+        with rasterio.open(
+            save_path, mode="w", driver="GTiff",
+            height=n_rows, width=n_cols, count=1,
+            dtype=rasterio.float32, crs=crs, transform=transform,
+            nodata=np.nan, compress="lzw",
+        ) as dst:
+            dst.write(chm, 1)
+        print(f"CHM (from external DSM) saved to {save_path}")
+
+    return chm, transform, crs
+
 def build_chm(
     point_cloud,
     resolution=0.5,

@@ -140,10 +140,11 @@ def main():
 
     # ── CHM ───────────────────────────────────────────────────────────────
     if STEPS['Make_CHM']:
-        print('Making CHM...')
-        chm, transform, crs = build_chm(
-            point_cloud,
-            resolution=0.5,
+        print('Making CHM from external PixMapper4D DSM...')
+        chm, transform, crs = build_chm_from_external_dsm(
+            dsm_path=PATHS['DSM'] + TRIAL_NAME + '_dsm.tif',
+            point_cloud=point_cloud,
+            dtm_path=None,
             ground_percentile=5,
             save_path=PATHS['CHM']
         )
@@ -157,6 +158,12 @@ def main():
             return 1
         print('CHM loaded in successfully.')
 
+    # actual pixel size of the CHM grid — no longer safe to assume 0.5 m/px
+    # now that the DSM can come from PixMapper4D at whatever GSD-driven
+    # resolution it was exported at. transform.a is the affine's x-pixel-size.
+    CHM_RESOLUTION = abs(transform.a)
+    print(f"CHM resolution: {CHM_RESOLUTION} m/px")
+
     if STEPS['Make_Clusters']:
         print("Finding peaks in CHM...")
         peak_coords, peak_heights = find_chm_peaks(
@@ -164,6 +171,7 @@ def main():
             transform,
             min_height=MIN_HEIGHT,
             search_radius_m=SEARCH_RADIUS_M,
+            resolution=CHM_RESOLUTION,
             smooth_sigma=SMOOTH_SIGMA)
         print()
 
@@ -248,7 +256,8 @@ def main():
         max_radius=MAX_RADIUS,
         min_peak_distance=MIN_PEAK_DISTANCE,
         k=K,
-        min_density_ratio=MIN_DENSITY_RATIO
+        min_density_ratio=MIN_DENSITY_RATIO,
+        save_pre_split_path=PATHS['PS_clusters']
     )
     print("Clusters split.\n")
 
