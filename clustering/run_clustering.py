@@ -39,6 +39,17 @@ from functions import *
 print("Successfully loaded all packages.")
 
 
+def str2bool(v):
+    """argparse helper — accepts True/False, true/false, 1/0 etc."""
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ("true", "1", "yes"):
+        return True
+    if v.lower() in ("false", "0", "no"):
+        return False
+    raise argparse.ArgumentTypeError(f"Expected a boolean value, got '{v}'")
+
+
 def main():
 
     # ── CLI args ──────────────────────────────────────────────────────────
@@ -58,6 +69,13 @@ def main():
 
     parser.add_argument("--trial_name", type=str, required=True)
     parser.add_argument("--job_id",     type=str, required=True)
+
+    # gates ALL disk writes of clusters/dataframes/pcds/CHM/pre-split diagnostics.
+    # Default True so single runs (pinyons.sh) behave exactly as before.
+    # Sweep jobs (pinyon_sweep.sh) should pass --save False — matching_score
+    # still gets appended to GPS_results regardless, since that's the whole
+    # point of a sweep; this only silences the heavy artifact writes.
+    parser.add_argument("--save", type=str2bool, default=True)
 
     args = parser.parse_args()
 
@@ -79,6 +97,7 @@ def main():
 
     TRIAL_NAME = args.trial_name
     JOB_ID     = args.job_id
+    SAVE       = args.save
 
     NORMALIZE_HEIGHTS = True
 
@@ -98,6 +117,7 @@ def main():
     print("MIN_DENSITY_RATIO:", MIN_DENSITY_RATIO)
     print("GPS_SIGMA:", GPS_SIGMA)
     print("SMOOTH_SIGMA:", SMOOTH_SIGMA)
+    print("SAVE:", SAVE)
 
     K = MIN_POINTS
 
@@ -117,11 +137,14 @@ def main():
             v_size=VOXEL_SIZE)
         print('Point cloud successfully loaded.\n')
 
-        print(f"Saving raw point cloud... ( to { PATHS['Raw_pcd'] }")
-        if not os.path.exists(os.path.dirname(PATHS['Raw_pcd'])):
-            os.makedirs(os.path.dirname(PATHS['Raw_pcd']))
-        o3d.io.write_point_cloud(f"{ PATHS['Raw_pcd'] }", point_cloud)
-        print('Raw point cloud successfully saved.\n')
+        if SAVE:
+            print(f"Saving raw point cloud... ( to { PATHS['Raw_pcd'] }")
+            if not os.path.exists(os.path.dirname(PATHS['Raw_pcd'])):
+                os.makedirs(os.path.dirname(PATHS['Raw_pcd']))
+            o3d.io.write_point_cloud(f"{ PATHS['Raw_pcd'] }", point_cloud)
+            print('Raw point cloud successfully saved.\n')
+        else:
+            print("SAVE=False — skipping raw point cloud write.\n")
 
     else:
         print(f"Reading in raw pointcloud... (from {PATHS['Raw_pcd']})")
@@ -146,9 +169,12 @@ def main():
             point_cloud=point_cloud,
             dtm_path=None,
             ground_percentile=5,
-            save_path=PATHS['CHM']
+            save_path=PATHS['CHM'] if SAVE else None
         )
-        print(f"CHM complete. (Saved to {PATHS['CHM']})\n")
+        if SAVE:
+            print(f"CHM complete. (Saved to {PATHS['CHM']})\n")
+        else:
+            print("CHM complete. (SAVE=False — not written to disk.)\n")
     else:
         if os.path.exists(PATHS['CHM']):
             print(f"Loading in CHM... (from { PATHS['CHM'] })")
@@ -158,9 +184,6 @@ def main():
             return 1
         print('CHM loaded in successfully.')
 
-    # actual pixel size of the CHM grid — no longer safe to assume 0.5 m/px
-    # now that the DSM can come from PixMapper4D at whatever GSD-driven
-    # resolution it was exported at. transform.a is the affine's x-pixel-size.
     CHM_RESOLUTION = abs(transform.a)
     print(f"CHM resolution: {CHM_RESOLUTION} m/px")
 
@@ -193,11 +216,15 @@ def main():
         print("Point cloud successfully cleaned.\n")
 
         print(point_cloud)
-        print("Saving cleaned pointcloud...")
-        if not os.path.exists(os.path.dirname(PATHS['Cleaned_pcd'])):
-            os.makedirs(os.path.dirname(PATHS['Cleaned_pcd']))
-        o3d.io.write_point_cloud(PATHS['Cleaned_pcd'], point_cloud)
-        print("Cleaned pointcloud saved.\n")
+
+        if SAVE:
+            print("Saving cleaned pointcloud...")
+            if not os.path.exists(os.path.dirname(PATHS['Cleaned_pcd'])):
+                os.makedirs(os.path.dirname(PATHS['Cleaned_pcd']))
+            o3d.io.write_point_cloud(PATHS['Cleaned_pcd'], point_cloud)
+            print("Cleaned pointcloud saved.\n")
+        else:
+            print("SAVE=False — skipping cleaned pointcloud write.\n")
 
     else:
         print("Unprocessed pointcloud being used. Pointcloud is not being 'cleaned.'\n")
@@ -227,9 +254,12 @@ def main():
             min_exg=0.05,
         )
 
-        print("Saving clusters...")
-        save_clusters(clusters, PATHS['Clusters'])
-        print("Clusters saved.\n")
+        if SAVE:
+            print("Saving clusters...")
+            save_clusters(clusters, PATHS['Clusters'])
+            print("Clusters saved.\n")
+        else:
+            print("SAVE=False — skipping cluster .ply writes.\n")
 
     else:
         print(f"Reading in clusters... (from {PATHS['Clusters']})")
@@ -242,8 +272,6 @@ def main():
         print()
 
     # ── shared post-branch: ground strip + split ─────────────────────────
-    # Runs regardless of whether clusters were just built or loaded from
-    # disk, so clusters loaded from a previous run still get split.
     if not STEPS['Clean_Pointcloud']:
         print("Stripping ground from clusters...")
         clusters = strip_ground_from_clusters(clusters, ground_percentile=10, min_height_above_ground=0.5)
@@ -257,7 +285,10 @@ def main():
         min_peak_distance=MIN_PEAK_DISTANCE,
         k=K,
         min_density_ratio=MIN_DENSITY_RATIO,
-        save_pre_split_path=PATHS['PS_clusters']
+        # split_large_clusters() calls save_clusters_descriptive() internally
+        # whenever save_pre_split_path is not None — pass None during sweeps
+        # to skip that write entirely rather than gating it after the fact
+        save_pre_split_path=PATHS['PS_clusters'] if SAVE else None
     )
     print("Clusters split.\n")
 
@@ -293,29 +324,33 @@ def main():
         gps_sigma=GPS_SIGMA,
         job_id=JOB_ID,
         clusters=clusters,
-        multi_match_save_path=PATHS["MM_save_path"],
+        # save_multimatch_clusters() writes one .ply folder per ambiguous
+        # GPS label — skip during sweeps the same way as the other writes
+        multi_match_save_path=PATHS["MM_save_path"] if SAVE else None,
         graph_subtitle=f"EPS:{EPS}-MR:{MAX_RADIUS}-GT:{GREEN_THRESHOLD}-MPts:{MIN_POINTS}-MD:{MAX_DISTANCE}-K:{K}-MPD:{MIN_PEAK_DISTANCE}-GPSs:{GPS_SIGMA}-SMs:{SMOOTH_SIGMA}"
     )
     print("Labels assigned.\n")
 
-    # save labeled clusters — moved here (after labeling) so "Name" is
-    # actually populated when save_labeled_clusters filters on it
-    print("Saving labeled clusters...")
-    save_labeled_clusters(
-        clusters,
-        df_clusters,
-        save_path=PATHS['Labeled_clusters']
-    )
-    print("Labeled clusters saved.\n")
+    if SAVE:
+        print("Saving labeled clusters...")
+        save_labeled_clusters(
+            clusters,
+            df_clusters,
+            save_path=PATHS['Labeled_clusters']
+        )
+        print("Labeled clusters saved.\n")
 
-    # save dataframes AFTER labeling so train_model.py loads a df_clusters
-    # that already has "Name" / "label_distance" populated
-    print("Saving feature dataframes...")
-    save_dataframes(df_clusters, df_deep_clusters, PATHS['Dataframes'])
-    print("Dataframes saved.\n")
+        print("Saving feature dataframes...")
+        save_dataframes(df_clusters, df_deep_clusters, PATHS['Dataframes'])
+        print("Dataframes saved.\n")
+    else:
+        print("SAVE=False — skipping labeled cluster and dataframe writes.\n")
 
     # ── log matching score ────────────────────────────────────────────────
-    if STEPS['Cluster_accuracy']:
+    # Always runs regardless of SAVE — this one-row CSV append is the actual
+    # output a sweep exists to produce, and is cheap/safe under concurrent
+    # array tasks (unlike the multi-MB cluster/CHM writes above).
+    if STEPS['Cluster_accuracy'] and not SAVE:
         results = {
             "eps":               EPS,
             "green_threshold":   GREEN_THRESHOLD,

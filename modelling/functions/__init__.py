@@ -2,6 +2,7 @@
 from .features.get_pointcloud_stats import clusters_to_dataframe
 from .features.get_deep_cluster_features import make_deep_dataframe, engineer_features
 from .features.plot_feature_separability import plot_feature_separability
+from .features.plot_cluster_reality_check import plot_cluster_reality_check
 
 # classification
 from .classification.train_tree_classifier import train_tree_classifier

@@ -12,12 +12,25 @@ source open3d_env/bin/activate
 
 TRIAL_NAME="Sunset_sfm_trial"
 
+# files older than this get deleted
+MINS=45
+
 # clear out logs and images folder before beginning
-find trial_data/logs/* -mmin +15 -type f -delete
-find trial_data/images/* -mmin +15 -type f -delete
+find clustering/logs/* -mmin +$MINS -type f -delete
+find clustering/trial_data/$TRIAL_NAME/images/* -mmin +$MINS -type f -delete
+
+# print a divider in the results file 
+RESULTS_PATH=clustering/trial_data/$TRIAL_NAME/results/results_Jul18.csv
+if [ "${SLURM_ARRAY_TASK_ID}" == "${SLURM_ARRAY_TASK_MIN}" ]; then
+    mkdir -p "$(dirname "$RESULTS_PATH")"
+    {
+        echo ""
+        echo "# ==== sweep started $(date '+%Y-%m-%d %H:%M:%S') (SLURM array job ${SLURM_ARRAY_JOB_ID}) ===="
+    } >> "$RESULTS_PATH"
+fi
 
 # skip comment and blank lines, then get row SLURM_ARRAY_TASK_ID
-PARAMS=$(grep -v '^\s*#' clustering/parameters/params.txt | grep -v '^\s*$' | sed -n "${SLURM_ARRAY_TASK_ID}p")
+PARAMS=$(grep -v '^\s*#' clustering/params.txt | grep -v '^\s*$' | sed -n "${SLURM_ARRAY_TASK_ID}p")
 
 EPS=$(             echo $PARAMS | awk '{print $1}')
 GREEN=$(            echo $PARAMS | awk '{print $2}')
@@ -31,6 +44,9 @@ MIN_HEIGHT=$(       echo $PARAMS | awk '{print $9}')
 SEARCH_RADIUS_M=$(  echo $PARAMS | awk '{print $10}')
 GPS_SIGMA=$(        echo $PARAMS | awk '{print $11}')
 SMOOTH_SIGMA=$(     echo $PARAMS | awk '{print $12}')
+
+# keep false for sweeps
+SAVE=False
 
 echo "Task ${SLURM_ARRAY_TASK_ID}: eps=$EPS green=$GREEN crown=$RADIUS max_dist=$MAX_DISTANCE min_pts=$MIN_POINTS voxel=$VOXEL_SIZE mpd=$MIN_PEAK_DISTANCE k=$K min_h=$MIN_HEIGHT sr=$SEARCH_RADIUS_M gps_sigma=$GPS_SIGMA smooth_sigma=$SMOOTH_SIGMA"
 
@@ -51,4 +67,5 @@ python -u clustering/run_clustering.py \
     --gps_sigma        $GPS_SIGMA \
     --smooth_sigma     $SMOOTH_SIGMA \
     --job_id           $SLURM_JOB_ID \
+    --save             $SAVE \
     --trial_name       $TRIAL_NAME

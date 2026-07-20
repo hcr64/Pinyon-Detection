@@ -6,7 +6,7 @@ from .io.save_clusters_descriptive import save_clusters_descriptive
 
 # preprocessing
 from .preprocessing.clean_up_pointcloud import clean_up_pointcloud
-from .preprocessing.build_chm import build_chm, load_chm, normalize_heights_by_ground
+from .preprocessing.build_chm import build_chm, load_chm, normalize_heights_by_ground, build_chm_from_external_dsm
 from .preprocessing.strip_ground_from_clusters import strip_ground_from_clusters
 
 # detection

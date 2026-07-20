@@ -14,7 +14,7 @@ STEPS = {
     # making the canopy from height model with the unprocesses pcd
     # once done and saved, does not need to be ran again
     # takes less than 2 minutes 
-    'Make_CHM':False,
+    'Make_CHM':True,
 
     # if the large pointcloud needs to be cleaned again
     # very time consuming, more than 10 minutes
@@ -66,7 +66,7 @@ def get_paths(trial_name, scratch_dir='/scratch/hcr64/Pinyon-Detection/'):
         # local folder paths
         'Labels':           local_trial_dir + 'labels/sunset-sfm.csv',
         'Images':           local_trial_dir + 'images/',
-        'GPS_results':      local_trial_dir + 'results/results_Jul4.csv',
+        'GPS_results':      local_trial_dir + 'results/results_Jul18.csv',
         'Dataframes':       local_trial_dir + 'dataframes/',
     }
 
