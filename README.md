@@ -1,14 +1,18 @@
 # Pinyon-Detection
 
 A research pipeline for detecting and classifying pinyon, juniper, and
-ponderosa pine trees from drone-collected LiDAR/SfM point clouds. Developed
+ponderosa pine trees from drone-collected SfM point clouds. Developed
 for the **Sunset Crater** field site (`Sunset_sfm_trial`) and designed to run
 on the **Monsoon** SLURM HPC cluster.
+
+<img src="/home/hcr64/Pinyon-Detection/assets/IMG_3632.jpg" alt="A drought susceptable pinyon pine at site A in Sunset Crater, AZ.">
 
 The pipeline ingests raw `.las` files, builds a Canopy Height Model, detects
 tree tops as CHM peaks, segments individual crowns via watershed, matches
 GPS-tagged ground-truth species to clusters, and trains a species classifier
 on the labeled subset.
+
+<img src="/home/hcr64/Pinyon-Detection/assets/Screenshot 2026-02-18 142241.png" alt="Screenshot of Structure-from-motion pointcloud of site A in Sunset Crater, AZ.">
 
 It's split into two independent stages:
 
@@ -34,6 +38,7 @@ iterations.
 Pinyon-Detection/
 ├── README.md                 # this file
 ├── PIPELINE.md                # detailed stage-by-stage walkthrough
+├── .gitignore                 # excludes generated point clouds, clusters, logs, venv
 │
 ├── clustering/
 │   ├── run_clustering.py      # entry point — clustering + GPS labeling
@@ -84,6 +89,12 @@ Requires Python 3.10. Key dependencies: `open3d`, `numpy`, `scipy`,
 `scikit-learn`, `rasterio`, `scikit-image`, `laspy`, `pyproj`, `pandas`,
 `matplotlib`. For `modelling/`'s `--advanced` flag, also install `xgboost`
 and `lightgbm` (not in `setup_venv.sh` yet).
+
+`.gitignore` excludes `open3d_env/` and every generated pipeline artifact
+(point clouds, clusters, CHMs, dataframes, images, SLURM logs) — these are
+all regenerable from a `run_clustering.py` run and get large fast, so they
+stay out of git history. `results/` CSVs are small and are the actual
+experiment record, so those stay tracked.
 
 ### 2. Configure paths and steps
 
