@@ -15,7 +15,9 @@ tree tops as CHM peaks, segments individual crowns via watershed, matches
 GPS-tagged ground-truth species to clusters, and trains a species classifier
 on the labeled subset.
 
-<img src="assets/PM4D_SC_aerial.png" alt="Screenshot of Structure-from-motion pointcloud of site A in Sunset Crater, AZ. Visualized using PixMapper4D." style="width: 75%; display: block; margin: 0 auto;">
+<div align="center">
+  <img src="assets/PM4D_SC_aerial.png" alt="Screenshot of Structure-from-motion pointcloud of site A in Sunset Crater, AZ. Visualized using PixMapper4D." width="75%">
+</div>
 Screenshot of Structure-from-motion pointcloud of site A in Sunset Crater, AZ. Visualized using PixMapper4D.
 
 It's split into two independent stages:
@@ -134,7 +136,9 @@ spreading.
 `clustering/`'s output metric: the fraction of GPS-labeled trees with
 exactly one detected cluster within `max_distance`.
 
-<img src="assets/cluster_label_overlay.png" alt="Graph displaying clusters and labels collected from the field of site A in Sunset Crater, AZ." style="width: 75%; display: block; margin: 0 auto;">
+<div align="center">
+  <img src="assets/cluster_label_overlay.png" alt="Graph displaying clusters and labels collected from the field of site A in Sunset Crater, AZ." width="75%">
+</div>
 Graph displaying clusters and labels collected from the field of site A in Sunset Crater, AZ.
 
 ```
@@ -168,7 +172,9 @@ proximity filter in the label matcher handles the non-rectangular footprint.
 
 Species present: pinyon pine, juniper, ponderosa pine.
 
-<img src="assets/SSC_google_maps_SC.png" alt="Aerial screen shot of site A in Sunset Crater, AZ. Taken on Google Maps." style="width: 75%; display: block; margin: 0 auto;">
+<div align="center">
+  <img src="assets/SSC_google_maps_SC.png" alt="Aerial screen shot of site A in Sunset Crater, AZ. Taken on Google Maps." width="75%">
+</div>
 Aerial screen shot of site A in Sunset Crater, AZ. Taken on Google Maps.
 
 ---
