@@ -50,9 +50,12 @@ def get_paths(trial_name, scratch_dir='/scratch/hcr64/Pinyon-Detection/'):
     return {
 
         # scratch folder paths
-        'Data':             scratch_dir + 'point_cloud/',
-        'DSM':              scratch_dir + '1_dsm/',
+        'Data':             scratch_dir + 'point_cloud/', # .las files need to be here for processing
+        'DSM':              scratch_dir + '1_dsm/', # a DSM can be here if available, but if not one can be made
 
+
+        # everything below are for writing to disk. If already saved, 
+        # they can speed up the duration of the program by several minutes.
         'Pointclouds':      scratch_dir + 'pointclouds/',
         'Raw_pcd':          scratch_dir + 'pointclouds/raw_pcd.ply',
         'Cleaned_pcd':      scratch_dir + 'pointclouds/cleaned_pcd.ply',
@@ -68,5 +71,6 @@ def get_paths(trial_name, scratch_dir='/scratch/hcr64/Pinyon-Detection/'):
         'Images':           local_trial_dir + 'images/',
         'GPS_results':      local_trial_dir + 'results/results_Jul18.csv',
         'Dataframes':       local_trial_dir + 'dataframes/',
+        'Models':           local_trial_dir + 'models/',
     }
 

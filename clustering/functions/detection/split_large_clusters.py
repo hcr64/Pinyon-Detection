@@ -3,8 +3,13 @@ import open3d as o3d
 from scipy.spatial import KDTree
 from sklearn.cluster import MeanShift, estimate_bandwidth
 
-from functions.io.save_clusters import save_clusters
+
 from functions.io.save_clusters_descriptive import save_clusters_descriptive
+
+import sys
+sys.path.insert(0, "/home/hcr64/Pinyon-Detection")
+from global_files.save_clusters import save_clusters
+
 
 def filter_cluster(pcd, min_height=1.0, min_radius=0.3):
     """

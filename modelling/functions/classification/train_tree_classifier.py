@@ -31,32 +31,20 @@ import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use("Agg")  # headless — safe for SLURM
 
-
-# ── baseline feature columns ──────────────────────────────────────────────────
-# engineer_features() appends four more; FEATURES is updated inside
-# train_tree_classifier() after feature selection runs.
-
-FEATURES = [
-    "height", "radius", "n_points",
-    "obb_extent_x", "obb_extent_y", "obb_extent_z",
-    "eigenvalue_1", "eigenvalue_2", "eigenvalue_3",
-    "linearity", "planarity", "sphericity",
-    "mean_r", "mean_g", "mean_b",
-    "std_r", "std_g", "std_b",
-    # engineered features added by engineer_features() in get_deep_cluster_features.py
-    "height_to_radius",
-    "green_dominance",
-    "crown_volume",
-    "color_saturation",
-]
+from functions.feature_config import FEATURES
 
 
-# ── enhancement switches ──────────────────────────────────────────────────────
-# Set any entry to False to skip that enhancement entirely.
-# All four default to True so the full comparison runs out of the box.
-# Turn off slow ones (SMOTE, TUNING) when iterating quickly on features.
-
-ENHANCEMENTS = {
+# ── default enhancement switches ──────────────────────────────────────────────
+# These are the DEFAULTS used when train_tree_classifier() is called without
+# an `enhancements` argument (e.g. direct interactive use, or old callers).
+# Sweep callers (train_model.py) should pass an `enhancements` dict instead of
+# mutating this module-level constant — mutating it from another module does
+# nothing, since Python dicts imported via `from X import Y` for a *function*
+# don't expose this module-level name at all unless explicitly imported, and
+# even when imported, mutating it here doesn't affect a call already in
+# progress if the function captured its own copy. Passing enhancements
+# explicitly avoids all of that.
+DEFAULT_ENHANCEMENTS = {
     "SMOTE":     False,   # synthetic oversampling for juniper/ponderosa
     "WEIGHTING": True,   # manual 2× upweight on ponderosa beyond "balanced"
     "SELECTION": True,   # drop features below mean RF importance
@@ -65,7 +53,8 @@ ENHANCEMENTS = {
 
 
 def train_tree_classifier(df_deep, df_labels_matched,
-                          save_confusion_matrix_path=None):
+                          save_confusion_matrix_path=None,
+                          enhancements=None):
     """
     Train and compare species classifiers with four enhancements over the
     baseline, then return the best-performing model.
@@ -93,11 +82,25 @@ def train_tree_classifier(df_deep, df_labels_matched,
         save_confusion_matrix_path (str | None):
             Directory (or full path) to save the best-model confusion matrix
             PNG. Pass None to skip. Default None.
+        enhancements (dict | None):
+            Overrides for DEFAULT_ENHANCEMENTS — keys "SMOTE", "WEIGHTING",
+            "SELECTION", "TUNING". Pass a partial dict to override just some
+            keys; anything not given falls back to DEFAULT_ENHANCEMENTS.
+            This is how sweep callers (train_model.py --smote/--weighting/
+            --selection/--tuning) control these toggles per-run. Default
+            None (use DEFAULT_ENHANCEMENTS unchanged).
 
     Returns:
         best_model: Fitted estimator or Pipeline with highest test macro F1.
         features (list[str]): Feature columns actually used after selection.
+        best_metrics (dict): {"macro_f1": float, "kappa": float,
+            "cv_macro_f1": float, "cv_std": float, "model_name": str} for
+            the winning model — so sweep callers can log the score that
+            actually resulted from a given enhancement combination, not
+            just the combination itself.
     """
+
+    ENHANCEMENTS = {**DEFAULT_ENHANCEMENTS, **(enhancements or {})}
 
     # ── merge features with labels ────────────────────────────────────────────
     df = df_deep.merge(df_labels_matched[["file", "Name"]], on="file")
@@ -232,12 +235,6 @@ def train_tree_classifier(df_deep, df_labels_matched,
         rf_selected       = None
 
 
-    # ═════════════════════════════════════════════════════════════════════════
-    # ENHANCEMENT 4 — Hyperparameter tuning
-    # RandomizedSearchCV over the RF params most likely to matter on a small
-    # dataset. Runs on the full feature set (not the selected subset) so it
-    # is an independent comparison. n_iter=30 gives good coverage without
-    # the cost of a full grid search.
     # ═════════════════════════════════════════════════════════════════════════
     # ENHANCEMENT 4 — Hyperparameter tuning
     # RandomizedSearchCV over the RF params most likely to matter on a small
@@ -452,4 +449,12 @@ def train_tree_classifier(df_deep, df_labels_matched,
         for i, cls in enumerate(out_classes):
             df_deep[f"prob_{cls}"] = proba[:, i]
 
-    return best_model, best_feats
+    best_metrics = {
+        "model_name":  best_name,
+        "macro_f1":    float(df_results.iloc[0]["macro_f1"]),
+        "kappa":       float(df_results.iloc[0]["kappa"]),
+        "cv_macro_f1": float(df_results.iloc[0]["cv_macro_f1"]),
+        "cv_std":      float(df_results.iloc[0]["cv_std"]),
+    }
+
+    return best_model, best_feats, best_metrics

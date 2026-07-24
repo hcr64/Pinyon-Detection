@@ -33,8 +33,12 @@ import csv
 
 from scipy.spatial import KDTree
 
-from constants import *
 from functions import *
+
+# import global files, includes constants
+import sys
+sys.path.insert(0, "/home/hcr64/Pinyon-Detection")
+from global_files import * 
 
 print("Successfully loaded all packages.")
 
@@ -254,51 +258,36 @@ def main():
             min_exg=0.05,
         )
 
-        if SAVE:
-            print("Saving clusters...")
-            save_clusters(clusters, PATHS['Clusters'])
-            print("Clusters saved.\n")
-        else:
-            print("SAVE=False — skipping cluster .ply writes.\n")
+        # ── ground strip + split + final filter (Make_Clusters branch only) ──
+        # clusters loaded from disk in the else branch below have already been
+        # through this — .ply files are only ever saved post-processing, so
+        # reloading them never needs to redo it.
+        if not STEPS['Clean_Pointcloud']:
+            print("Stripping ground from clusters...")
+            clusters = strip_ground_from_clusters(clusters, ground_percentile=10, min_height_above_ground=0.5)
+            print("Ground stripped.\n")
 
-    else:
-        print(f"Reading in clusters... (from {PATHS['Clusters']})")
-        if os.path.exists(PATHS['Clusters']):
-            clusters = load_clusters(PATHS['Clusters'])
-            print("Clusters read in.")
-        else:
-            print(f"Could not find clusters save path ({PATHS['Clusters']}). Exiting program...")
-            return 1
-        print()
+        print("Splitting clusters...")
+        clusters = split_large_clusters(
+            clusters,
+            min_points=MIN_POINTS,
+            max_radius=MAX_RADIUS,
+            min_peak_distance=MIN_PEAK_DISTANCE,
+            k=K,
+            min_density_ratio=MIN_DENSITY_RATIO,
+            # split_large_clusters() calls save_clusters_descriptive() internally
+            # whenever save_pre_split_path is not None — pass None during sweeps
+            # to skip that write entirely rather than gating it after the fact
+            save_pre_split_path=PATHS['PS_clusters'] if SAVE else None
+        )
+        print("Clusters split.\n")
 
-    # ── shared post-branch: ground strip + split ─────────────────────────
-    if not STEPS['Clean_Pointcloud']:
-        print("Stripping ground from clusters...")
-        clusters = strip_ground_from_clusters(clusters, ground_percentile=10, min_height_above_ground=0.5)
-        print("Ground stripped.\n")
+        print("Filtering clusters...")
+        before = len(clusters)
+        clusters = [c for c in clusters if filter_cluster(c, min_height=1.0, min_radius=0.3)]
+        print(f"Filtered {before - len(clusters)} non-tree clusters, {len(clusters)} remaining\n")
 
-    print("Splitting clusters...")
-    clusters = split_large_clusters(
-        clusters,
-        min_points=MIN_POINTS,
-        max_radius=MAX_RADIUS,
-        min_peak_distance=MIN_PEAK_DISTANCE,
-        k=K,
-        min_density_ratio=MIN_DENSITY_RATIO,
-        # split_large_clusters() calls save_clusters_descriptive() internally
-        # whenever save_pre_split_path is not None — pass None during sweeps
-        # to skip that write entirely rather than gating it after the fact
-        save_pre_split_path=PATHS['PS_clusters'] if SAVE else None
-    )
-    print("Clusters split.\n")
-
-    print("Filtering clusters...")
-    before = len(clusters)
-    clusters = [c for c in clusters if filter_cluster(c, min_height=1.0, min_radius=0.3)]
-    print(f"Filtered {before - len(clusters)} non-tree clusters, {len(clusters)} remaining\n")
-
-    # ── feature extraction ────────────────────────────────────────────────
-    if STEPS['Make_Clusters']:
+        # make dataframes
         print("Making cluster df...")
         df_clusters = clusters_to_dataframe(clusters, k=K)
         print("Cluster df made.\n")
@@ -308,10 +297,40 @@ def main():
         df_deep_clusters = engineer_features(df_deep_clusters)
         print("Deep data cluster df made.\n")
 
+        # save the clusters after all processing has been done, dataframes get saved later on, more changes are made
+        if SAVE:
+            # save clusters
+            print("Saving clusters...")
+            save_clusters(clusters, PATHS['Clusters'])
+            print("Clusters saved.\n")
+
+        else:
+            print("SAVE=False — skipping cluster .ply writes.\n")
+
+
+    # if make clusters == false, load them in instead
+    # also load in dataframes too 
     else:
+        # trey loading in clusters
+        print(f"Reading in clusters... (from {PATHS['Clusters']})")
+        if os.path.exists(PATHS['Clusters']):
+            clusters = load_clusters(PATHS['Clusters'])
+            print("Clusters read in.")
+        else:
+            print(f"Could not find clusters save path ({PATHS['Clusters']}). Exiting program...")
+            return 1
+
+        # try loading in dataframes
         print("Reading in feature dataframes...")
-        df_clusters, df_deep_clusters = load_dataframes(PATHS['Dataframes'])
-        print("Dataframes read in.\n")
+        if os.path.exists(PATHS['Dataframes']):
+            df_clusters, df_deep_clusters = load_dataframes(PATHS['Dataframes'])
+            print("Dataframes read in.\n")
+        else:
+            print(f"Could not find dataframes save path ({PATHS['Dataframes']}). Exiting program...")
+            return 1
+
+        print()
+
 
     # ── GPS label matching ────────────────────────────────────────────────
     print("Assigning labels to clusters...")
@@ -331,6 +350,7 @@ def main():
     )
     print("Labels assigned.\n")
 
+    # save labeled clusters
     if SAVE:
         print("Saving labeled clusters...")
         save_labeled_clusters(
