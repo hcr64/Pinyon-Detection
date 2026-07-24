@@ -12,6 +12,8 @@ tree tops as CHM peaks, segments individual crowns via watershed, matches
 GPS-tagged ground-truth species to clusters, and trains a species classifier
 on the labeled subset.
 
+[Screenshot of Structure-from-motion pointcloud of site A in Sunset Crater, AZ.](/home/hcr64/Pinyon-Detection/assets/Screenshot 2026-02-18 142241.png)
+
 <img src="/home/hcr64/Pinyon-Detection/assets/Screenshot 2026-02-18 142241.png" alt="Screenshot of Structure-from-motion pointcloud of site A in Sunset Crater, AZ.">
 
 It's split into two independent stages:
