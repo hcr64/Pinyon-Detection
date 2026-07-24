@@ -6,15 +6,15 @@ for the **Sunset Crater** field site (`Sunset_sfm_trial`) and designed to run
 on the **Monsoon** SLURM HPC cluster.
 
 ![A drought susceptable pinyon pine at site A in Sunset Crater, AZ.](assets/IMG_3632.jpg)
+A drought susceptable pinyon pine at site A in Sunset Crater, AZ.
 
 The pipeline ingests raw `.las` files, builds a Canopy Height Model, detects
 tree tops as CHM peaks, segments individual crowns via watershed, matches
 GPS-tagged ground-truth species to clusters, and trains a species classifier
 on the labeled subset.
 
-![Screenshot of Structure-from-motion pointcloud of site A in Sunset Crater, AZ.](assets/Screenshot 2026-02-18 142241.png)
-
-<img src="/home/hcr64/Pinyon-Detection/assets/Screenshot 2026-02-18 142241.png" alt="Screenshot of Structure-from-motion pointcloud of site A in Sunset Crater, AZ.">
+![Screenshot of Structure-from-motion pointcloud of site A in Sunset Crater, AZ.](assets/142241.png)
+Screenshot of Structure-from-motion pointcloud of site A in Sunset Crater, AZ.
 
 It's split into two independent stages:
 
