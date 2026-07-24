@@ -5,7 +5,9 @@ ponderosa pine trees from drone-collected SfM point clouds. Developed
 for the **Sunset Crater** field site (`Sunset_sfm_trial`) and designed to run
 on the **Monsoon** SLURM HPC cluster.
 
-<img src="assets/SSC_pinyon1.jpg" alt="A drought susceptable pinyon pine at site A in Sunset Crater, AZ." style="width: 75%; display: block; margin: 0 auto;">
+<div style="text-align: center;">
+  <img src="assets/SSC_pinyon1.jpg" alt="A drought susceptable pinyon pine at site A in Sunset Crater, AZ." style="width: 75%;">
+</div>
 A drought susceptable pinyon pine at site A in Sunset Crater, AZ.
 
 The pipeline ingests raw `.las` files, builds a Canopy Height Model, detects
