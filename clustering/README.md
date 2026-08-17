@@ -1,9 +1,11 @@
 # Pinyon-Detection — Clustering & Labeling
 
 This is the expensive half of the pipeline: raw `.las` files → Canopy Height
-Model → watershed-segmented tree clusters → GPS-labeled clusters. Everything
+Model → watershed-segmented tree clusters → Filter likely non-tree clusters → GPS-labeled clusters. Everything
 here runs via `run_clustering.py` and is meant to be swept over SLURM array
 jobs to optimize `matching_score`.
+
+To decultter the amount of clusters, clusters that are lilely not trees get filtered out. CLusterw with low total points, clusters with few green points, and any clusters shorter than 1m are removed to make sure labels are placed on probable trees. 
 
 If you're looking for the classifier (species prediction on labeled
 clusters), that lives in `../modelling/` — see `../modelling/README.md`.

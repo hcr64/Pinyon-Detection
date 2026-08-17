@@ -12,8 +12,8 @@ source open3d_env/bin/activate
 
 TRIAL_NAME="Sunset_sfm_trial"
 
-# files older than this get deleted
-MINS=45
+# delete log files that are not running 
+bash ../shells/clear_garbage_files.sh
 
 # clear out logs and images folder before beginning
 find clustering/logs/* -mmin +$MINS -type f -delete

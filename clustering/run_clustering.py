@@ -103,8 +103,6 @@ def main():
     JOB_ID     = args.job_id
     SAVE       = args.save
 
-    NORMALIZE_HEIGHTS = True
-
     PATHS = get_paths(TRIAL_NAME)
 
     print()
@@ -123,13 +121,19 @@ def main():
     print("SMOOTH_SIGMA:", SMOOTH_SIGMA)
     print("SAVE:", SAVE)
 
-    K = MIN_POINTS
 
     print("TRIAL_NAME:", TRIAL_NAME)
     print("JOB_ID:", JOB_ID)
     print("Program Start Time: " + datetime.now().strftime("%H:%M:%S"))
     print()
     print()
+
+    # if  want to downsize the raw pointcloud or not
+    # this variable is on the chopping block, it is usually set to true
+    DOWNSIZE = True
+
+    # to get more in-depth printed messages
+    SILENT = True
 
     # ── load raw point cloud ─────────────────────────────────────────────
     if STEPS['Load_Pointcloud']:
@@ -160,6 +164,9 @@ def main():
             return 1
         print()
 
+
+
+
     if STEPS['Make_CHM'] or STEPS['Clean_Pointcloud']:
         print("Downsizing pointcloud...")
         point_cloud = point_cloud.voxel_down_sample(voxel_size=VOXEL_SIZE)
@@ -169,7 +176,7 @@ def main():
     if STEPS['Make_CHM']:
         print('Making CHM from external PixMapper4D DSM...')
         chm, transform, crs = build_chm_from_external_dsm(
-            dsm_path=PATHS['DSM'] + TRIAL_NAME + '_dsm.tif',
+            dsm_path=PATHS['DSM'],
             point_cloud=point_cloud,
             dtm_path=None,
             ground_percentile=5,
@@ -191,6 +198,7 @@ def main():
     CHM_RESOLUTION = abs(transform.a)
     print(f"CHM resolution: {CHM_RESOLUTION} m/px")
 
+
     if STEPS['Make_Clusters']:
         print("Finding peaks in CHM...")
         peak_coords, peak_heights = find_chm_peaks(
@@ -202,39 +210,33 @@ def main():
             smooth_sigma=SMOOTH_SIGMA)
         print()
 
-    # ── clean pointcloud ──────────────────────────────────────────────────
-    if STEPS['Clean_Pointcloud']:
-        points = np.asarray(point_cloud.points)
-        print(f"Point count:  {len(points)}")
-        print(f"XYZ min: {points.min(axis=0)}")
-        print(f"XYZ max: {points.max(axis=0)}")
-        print(f"Any NaN: {np.any(np.isnan(points))}")
+        # ── clean pointcloud ──────────────────────────────────────────────────
+        if STEPS['Clean_Pointcloud']:
+            points = np.asarray(point_cloud.points)
+            print(f"Point count:  {len(points)}")
+            print(f"XYZ min: {points.min(axis=0)}")
+            print(f"XYZ max: {points.max(axis=0)}")
+            print(f"Any NaN: {np.any(np.isnan(points))}")
 
-        if NORMALIZE_HEIGHTS:
-            print("Normalizing heights by ground surface...")
-            point_cloud = normalize_heights_by_ground(point_cloud, resolution=0.5)
-            print("Heights normalized.")
+            print("Cleaning up point cloud...")
+            point_cloud = clean_up_pointcloud(point_cloud, green_threshold=GREEN_THRESHOLD)
+            print("Point cloud successfully cleaned.\n")
 
-        print("Cleaning up point cloud...")
-        point_cloud = clean_up_pointcloud(point_cloud, green_threshold=GREEN_THRESHOLD)
-        print("Point cloud successfully cleaned.\n")
+            print(point_cloud)
 
-        print(point_cloud)
+            if SAVE:
+                print("Saving cleaned pointcloud...")
+                if not os.path.exists(os.path.dirname(PATHS['Cleaned_pcd'])):
+                    os.makedirs(os.path.dirname(PATHS['Cleaned_pcd']))
+                o3d.io.write_point_cloud(PATHS['Cleaned_pcd'], point_cloud)
+                print("Cleaned pointcloud saved.\n")
+            else:
+                print("SAVE=False — skipping cleaned pointcloud write.\n")
 
-        if SAVE:
-            print("Saving cleaned pointcloud...")
-            if not os.path.exists(os.path.dirname(PATHS['Cleaned_pcd'])):
-                os.makedirs(os.path.dirname(PATHS['Cleaned_pcd']))
-            o3d.io.write_point_cloud(PATHS['Cleaned_pcd'], point_cloud)
-            print("Cleaned pointcloud saved.\n")
         else:
-            print("SAVE=False — skipping cleaned pointcloud write.\n")
+            print("Unprocessed pointcloud being used. Pointcloud is not being 'cleaned.'\n")
 
-    else:
-        print("Unprocessed pointcloud being used. Pointcloud is not being 'cleaned.'\n")
-
-    # ── cluster / load clusters ──────────────────────────────────────────
-    if STEPS['Make_Clusters']:
+    
         print("Clustering point cloud...")
         clusters = cluster_by_chm_peaks(
             point_cloud,
@@ -311,7 +313,7 @@ def main():
     # if make clusters == false, load them in instead
     # also load in dataframes too 
     else:
-        # trey loading in clusters
+        # try loading in clusters
         print(f"Reading in clusters... (from {PATHS['Clusters']})")
         if os.path.exists(PATHS['Clusters']):
             clusters = load_clusters(PATHS['Clusters'])
@@ -367,38 +369,38 @@ def main():
         print("SAVE=False — skipping labeled cluster and dataframe writes.\n")
 
     # ── log matching score ────────────────────────────────────────────────
-    # Always runs regardless of SAVE — this one-row CSV append is the actual
-    # output a sweep exists to produce, and is cheap/safe under concurrent
-    # array tasks (unlike the multi-MB cluster/CHM writes above).
-    if STEPS['Cluster_accuracy'] and not SAVE:
-        results = {
-            "eps":               EPS,
-            "green_threshold":   GREEN_THRESHOLD,
-            "max_radius":        MAX_RADIUS,
-            "max_distance":      MAX_DISTANCE,
-            "min_points":        MIN_POINTS,
-            "voxel_size":        VOXEL_SIZE,
-            "min_peak_distance": MIN_PEAK_DISTANCE,
-            "k":                 K,
-            "min_height":        MIN_HEIGHT,
-            "search_radius_m":   SEARCH_RADIUS_M,
-            "gps_sigma":         GPS_SIGMA,
-            "smooth_sigma":      SMOOTH_SIGMA,
-            "normalize_heights": NORMALIZE_HEIGHTS,
-            "matching_score":    score,
-        }
+    # Always runs, for every run — sweep task or full manual run via
+    # pinyons.sh alike. The score computation itself is already
+    # unconditional (see match_labels_to_clusters() above); this just
+    # appends one cheap row to the results CSV so every run's score gets
+    # a permanent record, not only sweep runs.
+    results = {
+        "eps":               EPS,
+        "green_threshold":   GREEN_THRESHOLD,
+        "max_radius":        MAX_RADIUS,
+        "max_distance":      MAX_DISTANCE,
+        "min_points":        MIN_POINTS,
+        "voxel_size":        VOXEL_SIZE,
+        "min_peak_distance": MIN_PEAK_DISTANCE,
+        "k":                 K,
+        "min_height":        MIN_HEIGHT,
+        "search_radius_m":   SEARCH_RADIUS_M,
+        "gps_sigma":         GPS_SIGMA,
+        "smooth_sigma":      SMOOTH_SIGMA,
+        "matching_score":    score,
+    }
 
-        results_path = PATHS['GPS_results']
-        os.makedirs(os.path.dirname(results_path), exist_ok=True)
-        file_exists = os.path.exists(results_path)
+    results_path = PATHS['GPS_results']
+    os.makedirs(os.path.dirname(results_path), exist_ok=True)
+    file_exists = os.path.exists(results_path)
 
-        with open(results_path, "a", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=results.keys())
-            if not file_exists:
-                writer.writeheader()
-            writer.writerow(results)
+    with open(results_path, "a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=results.keys())
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(results)
 
-        print(f"Results saved to {results_path}")
+    print(f"Results saved to {results_path}")
 
     print("Clustering + labeling complete.")
     print("Time at Completion: " + datetime.now().strftime("%H:%M:%S"))
