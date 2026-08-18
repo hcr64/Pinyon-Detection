@@ -137,10 +137,6 @@ Best achieved on Sunset Crater so far: **~0.83**.
 These are current, real behaviors of the code — not necessarily bugs to fix
 blindly, but worth knowing before you spend a sweep on them:
 
-- **`k` is silently overwritten.** `run_clustering.py` sets `K = MIN_POINTS`
-  right after parsing args, so whatever you pass via `--k` (or column 8 in
-  `params.txt`) is discarded. If you want to sweep `k` independently, this
-  line needs to change first.
 - **`gps_sigma` doesn't move `matching_score`.** `calculate_matching_score()`
   scores purely via a KDTree ball-query on raw distance — `gps_sigma` only
   reweights the Hungarian cost matrix used for *species label assignment*.
@@ -148,21 +144,13 @@ blindly, but worth knowing before you spend a sweep on them:
   multi-match cases, not the matching score itself. Watch the multi-match
   diagnostic output (`multi_match_clusters/`), not `matching_score`, when
   tuning this.
-- **Height normalization only runs if `Clean_Pointcloud` is on.**
-  `NORMALIZE_HEIGHTS = True` is hardcoded in `run_clustering.py`, but it's
-  nested inside `if STEPS['Clean_Pointcloud']:`. With that flag `False` (the
-  current default in `constants.py`), normalization never executes
-  regardless of `NORMALIZE_HEIGHTS`.
-- **`filter_clusters_by_chm_peaks()`** exists in `detection/find_chm_peaks.py`
-  but isn't called anywhere in the current pipeline — it's dead code unless
-  you wire it in.
-- **Cached dataframes and reloaded clusters can drift out of sync.** Ground
-  stripping and cluster splitting now always run in the shared post-branch
-  section regardless of `Make_Clusters`. If `Make_Clusters=False` loads
-  cached dataframes via `load_dataframes()`, make sure they were built from
-  clusters that went through the *same* split parameters — otherwise the
-  `file` index between `df_clusters` and the freshly-loaded cluster list can
-  misalign.
+- **Height normalization is not currently wired in.** `normalize_heights_by_ground()`
+  still exists in `preprocessing/build_chm.py` but nothing in
+  `run_clustering.py` calls it — heights are used as-is (absolute UTM Z)
+  throughout. This matches the finding that normalization hurt matching
+  scores at Sunset Crater; re-enable by calling it explicitly inside the
+  `Clean_Pointcloud` block if you want to test it again.
+
 
 ---
 

@@ -11,9 +11,23 @@
 source open3d_env/bin/activate
 
 TRIAL_NAME="Sunset_sfm_trial"
+MESSAGE="N/A"
+
+# get a user inputted message after the -m command
+while getopts "m:" opt; do
+  case ${opt} in
+    m )
+      MESSAGE="$OPTARG"
+      ;;
+    \? )
+      echo "Usage: $0 -m \"your message\"" >&2
+      exit 1
+      ;;
+  esac
+done
 
 # delete log files that are not running 
-bash ../shells/clear_garbage_files.sh
+bash shells/clear_garbage_files.sh
 
 # clear out logs and images folder before beginning
 find clustering/logs/* -mmin +$MINS -type f -delete
@@ -26,6 +40,9 @@ if [ "${SLURM_ARRAY_TASK_ID}" == "${SLURM_ARRAY_TASK_MIN}" ]; then
     {
         echo ""
         echo "# ==== sweep started $(date '+%Y-%m-%d %H:%M:%S') (SLURM array job ${SLURM_ARRAY_JOB_ID}) ===="
+        echo "# ==== Notes: ${MESSAGE} ====" # add the message beneath the job array info
+        echo
+
     } >> "$RESULTS_PATH"
 fi
 

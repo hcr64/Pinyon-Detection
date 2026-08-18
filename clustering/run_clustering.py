@@ -154,6 +154,7 @@ def main():
         else:
             print("SAVE=False — skipping raw point cloud write.\n")
 
+    # do not load in the raw pointcloud, instead read it in from disk
     else:
         print(f"Reading in raw pointcloud... (from {PATHS['Raw_pcd']})")
         if os.path.exists(os.path.dirname(PATHS['Raw_pcd'])):
@@ -165,8 +166,8 @@ def main():
         print()
 
 
-
-
+    # downsize the pointcloud, only necessary if processing will be done to it, either making the chm or cleaning it
+    # otherwise no use in this, and only takes longer
     if STEPS['Make_CHM'] or STEPS['Clean_Pointcloud']:
         print("Downsizing pointcloud...")
         point_cloud = point_cloud.voxel_down_sample(voxel_size=VOXEL_SIZE)
@@ -186,6 +187,8 @@ def main():
             print(f"CHM complete. (Saved to {PATHS['CHM']})\n")
         else:
             print("CHM complete. (SAVE=False — not written to disk.)\n")
+
+    # read in the chm from memory
     else:
         if os.path.exists(PATHS['CHM']):
             print(f"Loading in CHM... (from { PATHS['CHM'] })")
@@ -199,139 +202,97 @@ def main():
     print(f"CHM resolution: {CHM_RESOLUTION} m/px")
 
 
-    if STEPS['Make_Clusters']:
-        print("Finding peaks in CHM...")
-        peak_coords, peak_heights = find_chm_peaks(
-            chm,
-            transform,
-            min_height=MIN_HEIGHT,
-            search_radius_m=SEARCH_RADIUS_M,
-            resolution=CHM_RESOLUTION,
-            smooth_sigma=SMOOTH_SIGMA)
-        print()
-
-        # ── clean pointcloud ──────────────────────────────────────────────────
-        if STEPS['Clean_Pointcloud']:
-            points = np.asarray(point_cloud.points)
-            print(f"Point count:  {len(points)}")
-            print(f"XYZ min: {points.min(axis=0)}")
-            print(f"XYZ max: {points.max(axis=0)}")
-            print(f"Any NaN: {np.any(np.isnan(points))}")
-
-            print("Cleaning up point cloud...")
-            point_cloud = clean_up_pointcloud(point_cloud, green_threshold=GREEN_THRESHOLD)
-            print("Point cloud successfully cleaned.\n")
-
-            print(point_cloud)
-
-            if SAVE:
-                print("Saving cleaned pointcloud...")
-                if not os.path.exists(os.path.dirname(PATHS['Cleaned_pcd'])):
-                    os.makedirs(os.path.dirname(PATHS['Cleaned_pcd']))
-                o3d.io.write_point_cloud(PATHS['Cleaned_pcd'], point_cloud)
-                print("Cleaned pointcloud saved.\n")
-            else:
-                print("SAVE=False — skipping cleaned pointcloud write.\n")
-
-        else:
-            print("Unprocessed pointcloud being used. Pointcloud is not being 'cleaned.'\n")
-
-    
-        print("Clustering point cloud...")
-        clusters = cluster_by_chm_peaks(
-            point_cloud,
-            peak_coords,
-            chm=chm,
-            transform=transform,
-            crown_radius=MAX_RADIUS,
-            min_points=MIN_POINTS
-        )
-        print("Point cloud clustered.\n")
-
-        MIN_POINT_HEIGHT = 1.5
-        clusters = [
-            c for c in clusters
-            if np.asarray(c.points)[:, 2].max() - np.asarray(c.points)[:, 2].min() > MIN_POINT_HEIGHT
-        ]
-
-        clusters = filter_clusters_by_green_crown(
-            clusters,
-            top_fraction=0.20,
-            min_exg=0.05,
-        )
-
-        # ── ground strip + split + final filter (Make_Clusters branch only) ──
-        # clusters loaded from disk in the else branch below have already been
-        # through this — .ply files are only ever saved post-processing, so
-        # reloading them never needs to redo it.
-        if not STEPS['Clean_Pointcloud']:
-            print("Stripping ground from clusters...")
-            clusters = strip_ground_from_clusters(clusters, ground_percentile=10, min_height_above_ground=0.5)
-            print("Ground stripped.\n")
-
-        print("Splitting clusters...")
-        clusters = split_large_clusters(
-            clusters,
-            min_points=MIN_POINTS,
-            max_radius=MAX_RADIUS,
-            min_peak_distance=MIN_PEAK_DISTANCE,
-            k=K,
-            min_density_ratio=MIN_DENSITY_RATIO,
-            # split_large_clusters() calls save_clusters_descriptive() internally
-            # whenever save_pre_split_path is not None — pass None during sweeps
-            # to skip that write entirely rather than gating it after the fact
-            save_pre_split_path=PATHS['PS_clusters'] if SAVE else None
-        )
-        print("Clusters split.\n")
-
-        print("Filtering clusters...")
-        before = len(clusters)
-        clusters = [c for c in clusters if filter_cluster(c, min_height=1.0, min_radius=0.3)]
-        print(f"Filtered {before - len(clusters)} non-tree clusters, {len(clusters)} remaining\n")
-
-        # make dataframes
-        print("Making cluster df...")
-        df_clusters = clusters_to_dataframe(clusters, k=K)
-        print("Cluster df made.\n")
-
-        print("Making deep data cluster df...")
-        df_deep_clusters = make_deep_dataframe(clusters)
-        df_deep_clusters = engineer_features(df_deep_clusters)
-        print("Deep data cluster df made.\n")
-
-        # save the clusters after all processing has been done, dataframes get saved later on, more changes are made
-        if SAVE:
-            # save clusters
-            print("Saving clusters...")
-            save_clusters(clusters, PATHS['Clusters'])
-            print("Clusters saved.\n")
-
-        else:
-            print("SAVE=False — skipping cluster .ply writes.\n")
 
 
-    # if make clusters == false, load them in instead
-    # also load in dataframes too 
+    ### With evertyhting loaded in, the clustering begins
+    ### Very time consuming, can take up to an hour or longer in some cases
+
+    # find peaks in the caonpy height model, use to cluster later
+    print("Finding peaks in CHM...")
+    peak_coords, peak_heights = find_chm_peaks(
+        chm,
+        transform,
+        min_height=MIN_HEIGHT,
+        search_radius_m=SEARCH_RADIUS_M,
+        resolution=CHM_RESOLUTION,
+        smooth_sigma=SMOOTH_SIGMA)
+    print()
+
+
+    # cluster the chm by the peaks. Takes a while
+    print("Clustering point cloud...")
+    clusters = cluster_by_chm_peaks(
+        point_cloud,
+        peak_coords,
+        chm=chm,
+        transform=transform,
+        crown_radius=MAX_RADIUS,
+        min_points=MIN_POINTS
+    )
+    print("Point cloud clustered.\n")
+
+    MIN_POINT_HEIGHT = 1.5
+    clusters = [
+        c for c in clusters
+        if np.asarray(c.points)[:, 2].max() - np.asarray(c.points)[:, 2].min() > MIN_POINT_HEIGHT
+    ]
+
+    # filter clusters by how green their most green points are, my custom function
+    clusters = filter_clusters_by_green_crown(
+        clusters,
+        top_fraction=0.20,
+        min_exg=0.05,
+    )
+
+    # strip ground from the clusters, make sure it is just tree
+    print("Stripping ground from clusters...")
+    clusters = strip_ground_from_clusters(clusters, ground_percentile=10, min_height_above_ground=0.5)
+    print("Ground stripped.\n")
+
+    # splits clusters that are likely multiple trees
+    # uses point density cores to find multiple clusters within one
+    print("Splitting clusters...")
+    clusters = split_large_clusters(
+        clusters,
+        min_points=MIN_POINTS,
+        max_radius=MAX_RADIUS,
+        min_peak_distance=MIN_PEAK_DISTANCE,
+        k=K,
+        min_density_ratio=MIN_DENSITY_RATIO,
+        # split_large_clusters() calls save_clusters_descriptive() internally
+        # whenever save_pre_split_path is not None — pass None during sweeps
+        # to skip that write entirely rather than gating it after the fact
+        save_pre_split_path=PATHS['PS_clusters'] if SAVE else None
+    )
+    print("Clusters split.\n")
+
+    # filter out clusters by height and radius, make sure they are all likely trees
+    print("Filtering clusters...")
+    before = len(clusters)
+    clusters = [c for c in clusters if filter_cluster(c, min_height=1.0, min_radius=0.3)]
+    print(f"Filtered {before - len(clusters)} non-tree clusters, {len(clusters)} remaining\n")
+
+    # make dataframes, these are less complex that can also be sued for graphing
+    print("Making cluster df...")
+    df_clusters = clusters_to_dataframe(clusters, k=K)
+    print("Cluster df made.\n")
+
+    # get a deeper feature df specifically for model training
+    print("Making deep data cluster df...")
+    df_deep_clusters = make_deep_dataframe(clusters)
+    df_deep_clusters = engineer_features(df_deep_clusters)
+    print("Deep data cluster df made.\n")
+
+    # save the clusters after all processing has been done, dataframes get saved later on, more changes are made
+    if SAVE:
+        # save clusters
+        print("Saving clusters...")
+        save_clusters(clusters, PATHS['Clusters'])
+        print("Clusters saved.\n")
+
     else:
-        # try loading in clusters
-        print(f"Reading in clusters... (from {PATHS['Clusters']})")
-        if os.path.exists(PATHS['Clusters']):
-            clusters = load_clusters(PATHS['Clusters'])
-            print("Clusters read in.")
-        else:
-            print(f"Could not find clusters save path ({PATHS['Clusters']}). Exiting program...")
-            return 1
+        print("SAVE=False — skipping cluster .ply writes.\n")
 
-        # try loading in dataframes
-        print("Reading in feature dataframes...")
-        if os.path.exists(PATHS['Dataframes']):
-            df_clusters, df_deep_clusters = load_dataframes(PATHS['Dataframes'])
-            print("Dataframes read in.\n")
-        else:
-            print(f"Could not find dataframes save path ({PATHS['Dataframes']}). Exiting program...")
-            return 1
-
-        print()
 
 
     # ── GPS label matching ────────────────────────────────────────────────
