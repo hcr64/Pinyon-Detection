@@ -105,6 +105,14 @@ def plot_feature_separability(df_deep, df_labels_matched, save_path,
         ("std_r",           "std_g"),
         ("linearity",       "planarity"),
         ("sphericity",      "eigenvalue_1"),
+        # chromaticity (shadow-robust) — see get_deep_cluster_features.py
+        ("chroma_g",        "chroma_r"),
+        ("chroma_g",        "chroma_b"),
+        ("mean_g",          "chroma_g"),   # raw vs. chromaticity green side-by-side —
+                                            # if shadow is a real problem, chroma_g
+                                            # should separate species more cleanly
+                                            # than mean_g does
+        ("exg_chroma",      "chroma_g_std"),
     ]
 
     _make_scatter_grid(

@@ -61,15 +61,12 @@ from lightgbm import LGBMClassifier
 
 
 # ── feature set (must match make_deep_dataframe output) ──────────────────────
+# imported from feature_config.py so this stays in sync with
+# train_tree_classifier.py and semi_supervised.py automatically — previously
+# this was a separately hardcoded list that happened to agree by luck (see
+# modelling/README.md "Known Quirks").
 
-FEATURES = [
-    "height", "radius", "n_points",
-    "obb_extent_x", "obb_extent_y", "obb_extent_z",
-    "eigenvalue_1", "eigenvalue_2", "eigenvalue_3",
-    "linearity", "planarity", "sphericity",
-    "mean_r", "mean_g", "mean_b",
-    "std_r", "std_g", "std_b",
-]
+from functions.feature_config import FEATURES
 
 
 # ── model definitions ─────────────────────────────────────────────────────────

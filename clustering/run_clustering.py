@@ -166,15 +166,14 @@ def main():
         print()
 
 
-    # downsize the pointcloud, only necessary if processing will be done to it, either making the chm or cleaning it
-    # otherwise no use in this, and only takes longer
-    if STEPS['Make_CHM'] or STEPS['Clean_Pointcloud']:
+    # ── CHM ───────────────────────────────────────────────────────────────
+    if STEPS['Make_CHM']:
+        # downsize the pointcloud, can take a while
         print("Downsizing pointcloud...")
         point_cloud = point_cloud.voxel_down_sample(voxel_size=VOXEL_SIZE)
         print("Done downsizing.\n")
 
-    # ── CHM ───────────────────────────────────────────────────────────────
-    if STEPS['Make_CHM']:
+        # make the chm
         print('Making CHM from external PixMapper4D DSM...')
         chm, transform, crs = build_chm_from_external_dsm(
             dsm_path=PATHS['DSM'],
@@ -294,7 +293,6 @@ def main():
         print("SAVE=False — skipping cluster .ply writes.\n")
 
 
-
     # ── GPS label matching ────────────────────────────────────────────────
     print("Assigning labels to clusters...")
     df_clusters, score = match_labels_to_clusters(
@@ -351,6 +349,7 @@ def main():
         "matching_score":    score,
     }
 
+    # save the results to the results path
     results_path = PATHS['GPS_results']
     os.makedirs(os.path.dirname(results_path), exist_ok=True)
     file_exists = os.path.exists(results_path)

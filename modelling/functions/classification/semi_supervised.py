@@ -61,23 +61,11 @@ from sklearn.semi_supervised import LabelSpreading
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.metrics import classification_report, f1_score, cohen_kappa_score
 
-
-# must match FEATURES in train_tree_classifier.py exactly
-FEATURES = [
-    "height", "radius", "n_points",
-    "obb_extent_x", "obb_extent_y", "obb_extent_z",
-    "eigenvalue_1", "eigenvalue_2", "eigenvalue_3",
-    "linearity", "planarity", "sphericity",
-    "mean_r", "mean_g", "mean_b",
-    "std_r", "std_g", "std_b",
-    "height_to_radius",
-    "green_dominance",
-    "crown_volume",
-    "color_saturation",
-    "verticality",
-    "flatness_ratio",
-    "crown_base_ratio",
-]
+# imported from feature_config.py so this stays in sync with
+# train_tree_classifier.py and advanced_classifiers.py automatically —
+# previously this was a separately hardcoded list that happened to agree
+# by luck (see modelling/README.md "Known Quirks").
+from functions.feature_config import FEATURES
 
 
 def run_label_spreading(df_deep, df_labels_matched, save_path=None,

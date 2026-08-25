@@ -30,7 +30,6 @@ done
 bash shells/clear_garbage_files.sh
 
 # clear out logs and images folder before beginning
-find clustering/logs/* -mmin +$MINS -type f -delete
 find clustering/trial_data/$TRIAL_NAME/images/* -mmin +$MINS -type f -delete
 
 # print a divider in the results file 

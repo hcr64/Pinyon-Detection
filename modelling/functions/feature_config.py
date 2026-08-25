@@ -9,12 +9,20 @@ train_tree_classifier.py, advanced_classifiers.py, and semi_supervised.py.
 Adding an engineered feature meant updating three files by hand with no
 enforcement that they stayed in sync. Import FEATURES from here instead.
 
+NOTE: advanced_classifiers.py and semi_supervised.py still hardcode their
+own FEATURES lists (see modelling/README.md "Known Quirks") — if you add a
+feature here, add it there too until those are pointed at this file.
+
 Requirements: none
 """
 
 # baseline shape/PCA/colour features from get_deep_cluster_features()
 # + engineered ratio features from engineer_features()
 # + structural features from get_deep_cluster_features() (verticality etc.)
+# + chromaticity features from get_deep_cluster_features() (shadow-robust,
+#   per-point RGB normalized by per-point brightness before averaging —
+#   see clustering/functions/preprocessing/clean_up_pointcloud.py docstring
+#   and modelling notes on shadow/illumination robustness)
 FEATURES = [
     "height", "radius", "n_points",
     "obb_extent_x", "obb_extent_y", "obb_extent_z",
@@ -29,4 +37,9 @@ FEATURES = [
     "verticality",
     "flatness_ratio",
     "crown_base_ratio",
+    "chroma_r",
+    "chroma_g",
+    "chroma_b",
+    "chroma_g_std",
+    "exg_chroma",
 ]

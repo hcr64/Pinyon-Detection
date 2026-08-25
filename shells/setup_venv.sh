@@ -1,27 +1,38 @@
 #!/usr/bin/env bash
-
-# Stop on error
 set -e
 
-# Name of the virtual environment
-VENV_NAME="open3d_env"
+ENV_NAME="open3d_env"
 
-echo "Creating virtual environment: $VENV_NAME"
+if [ -n "$VIRTUAL_ENV" ] || [ -n "$CONDA_DEFAULT_ENV" ]; then
+    echo "Error: an environment is already active ($VIRTUAL_ENV$CONDA_DEFAULT_ENV). Deactivate first."
+    exit 1
+fi
 
-# make sure its python 3.10
-module load python/3.10
+echo "Loading miniforge3..."
+module load miniforge3/26.3.2
 
-# Create venv
-python -m venv $VENV_NAME
+echo "Creating conda environment: $ENV_NAME (python 3.10)"
+# explicitly include pip in the env so it doesn't fall back to a user-level pip
+conda create -n "$ENV_NAME" python=3.10 pip -y
 
-# Activate venv
-source $VENV_NAME/bin/activate
+source "$(conda info --base)/etc/profile.d/conda.sh"
+conda activate "$ENV_NAME"
 
-# Upgrade pip
-pip install --upgrade pip
+# sanity check — confirm python/pip actually resolve INSIDE the conda env
+echo "python: $(which python)"
+echo "pip:    $(which pip)"
 
-# Install specific Open3D version
-pip install --no-cache-dir open3d
-pip install numpy
-pip install laspy
+# use `python -m pip` rather than bare `pip` — guarantees the pip tied to
+# the currently active python, sidestepping PATH ambiguity entirely
+python -m pip install --upgrade pip
+python -m pip install --no-cache-dir open3d
+python -m pip install numpy laspy pandas scipy scikit-learn matplotlib pyproj rasterio scikit-image imbalanced-learn xgboost lightgbm
 
+# install torch too
+python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+echo
+echo "Verifying numpy resolves inside the env:"
+python -c "import numpy; print(numpy.__file__)"
+
+echo "Done. Activate with: module load miniforge3/26.3.2 && conda activate $ENV_NAME"
