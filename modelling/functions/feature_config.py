@@ -42,4 +42,10 @@ FEATURES = [
     "chroma_b",
     "chroma_g_std",
     "exg_chroma",
+
+    "top_red_exr",
+    "top_blue_exb",
+    "top_yellow_exy",
+    "top_grey",
+
 ]

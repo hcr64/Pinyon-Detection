@@ -54,23 +54,23 @@ Or run directly:
 
 ```bash
 python -u run_clustering.py \
-    --eps 2.0 \
-    --green_threshold 0.025 \
-    --max_radius 3.0 \
-    --max_distance 4.0 \
-    --min_points 200 \
-    --voxel_size 0.08 \
+    --eps               2.0 \
+    --green_threshold   0.025 \
+    --max_radius        3.0 \
+    --max_distance      4.0 \
+    --min_points        200 \
+    --voxel_size        0.08 \
     --min_peak_distance 3.0 \
-    --k 40 \
-    --min_height 1.0 \
-    --search_radius_m 3.0 \
-    --gps_sigma 4.0 \
-    --smooth_sigma 1.0 \
-    --job_id test \
-    --trial_name Sunset_sfm_trial
+    --k                 40 \
+    --min_height        1.0 \
+    --search_radius_m   3.0 \
+    --gps_sigma         4.0 \
+    --smooth_sigma      1.0 \
+    --job_id            test \
+    --trial_name        Sunset_sfm_trial
 ```
 
-There are more extensive variable descriotions in `pinyons.sh`.
+There are more extensive variable descriptions in `pinyons.sh`.
 
 This produces:
 - Segmented clusters → `trial_data/<trial_name>/clusters/`

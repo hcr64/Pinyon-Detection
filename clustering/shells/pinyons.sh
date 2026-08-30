@@ -6,8 +6,12 @@
 #SBATCH --time=3:00:00
 #SBATCH --mem=64G
 
-source /home/hcr64/Pinyon-Detection/open3d_env/bin/activate
+# access the venv
+module load miniforge3/26.3.2
+source "$(conda info --base)/etc/profile.d/conda.sh"
+conda activate open3d_env
 
+# set the trial name to field site name
 TRIAL_NAME="Sunset_sfm_trial"
 
 # DBSCAN clustering (unused with CHM method, keep at 2.0)

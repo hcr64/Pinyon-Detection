@@ -1,45 +1,41 @@
 # Pinyon-Detection
 
-A research pipeline for detecting and classifying pinyon, juniper, and
-ponderosa pine trees from drone-collected SfM point clouds. Developed
-for the **Sunset Crater** field site (`Sunset_sfm_trial`) and designed to run
-on the **Monsoon** SLURM HPC cluster.
+A research project intended to identify drought-tolerant pinyon pines from drone-collected SFM pointclouds processed using PixMapper4D. Currently, data has only been collected from a field site at **Sunset Crater, AZ**. The processing is done on the **Monsoon** SLURM HPC cluster at Northern Arizona University. 
 
 <div align="center">
-  <img src="assets/SSC_pinyon1.jpg" alt="A drought susceptable pinyon pine at site A in Sunset Crater, AZ." width="75%">
+  <img src="assets/root/SSC_pinyon1.jpg" alt="A drought susceptable pinyon pine at site A in Sunset Crater, AZ." width="75%">
 </div>
 A drought susceptable pinyon pine at site A in Sunset Crater, AZ.
 
-The pipeline ingests raw `.las` files, builds a Canopy Height Model, detects
+The pipeline takes in raw `.las` files, builds a Canopy Height Model, detects
 tree tops as CHM peaks, segments individual crowns via watershed, matches
 GPS-tagged ground-truth species to clusters, and trains a species classifier
-on the labeled subset.
+on the labeled subset. All `.las` used have been exported from PixMapper4D.
 
 <div align="center">
-  <img src="assets/PM4D_SC_aerial.png" alt="Screenshot of Structure-from-motion pointcloud of site A in Sunset Crater, AZ. Visualized using PixMapper4D." width="75%">
+  <img src="assets/root/PM4D_SC_aerial.png" alt="Screenshot of Structure-from-motion pointcloud of site A in Sunset Crater, AZ. Visualized using PixMapper4D." width="75%">
 </div>
 Screenshot of Structure-from-motion pointcloud of site A in Sunset Crater, AZ. Visualized using PixMapper4D.
 
-It's split into two independent stages:
+The project is split into two independent stages:
 
 - **`clustering/`** — everything expensive: point cloud processing, CHM,
   watershed segmentation, GPS label matching. Run via `run_clustering.py`,
   usually swept over many parameter combinations to optimize the matching
-  score. See [`clustering/README.md`](clustering/README.md).
+  score. Depending on parameters, can take anywhere from 25 minutes to an hour. 
+  See [`clustering/README.md`](clustering/README.md).
+
 - **`modelling/`** — species classification on the labeled clusters
   `clustering/` produced. Run via `train_model.py`, fast enough to iterate
-  on interactively. See [`modelling/README.md`](modelling/README.md).
+  on interactively. Currently only trained on species, not drough tolerance.
+  Takes a lot less time to run, usually less than 5 minutes. See [`modelling/README.md`](modelling/README.md).
 
-These used to be one script (`main.py`). They were split apart because sweep
-jobs only ever needed the clustering half, and running a full classifier
-comparison on every sweep array task was cluttering logs for no benefit —
-the labeled set doesn't change between clustering-parameter sweep
-iterations.
+These used to be one script (`main.py`). They were split apart because clustering was taking too long and was not required for training the model. The main file became too cluttered, and was clearly two seperate parts. 
 
 ---
 
 ## Repository Structure
-
+(May not be completely up-to-date)
 ```
 Pinyon-Detection/
 ├── README.md                 # this file
@@ -93,12 +89,11 @@ source open3d_env/bin/activate
 
 Requires Python 3.10. Key dependencies: `open3d`, `numpy`, `scipy`,
 `scikit-learn`, `rasterio`, `scikit-image`, `laspy`, `pyproj`, `pandas`,
-`matplotlib`. For `modelling/`'s `--advanced` flag, also install `xgboost`
-and `lightgbm` (not in `setup_venv.sh` yet).
+`matplotlib`, `xgboost`. 
 
 `.gitignore` excludes `open3d_env/` and every generated pipeline artifact
 (point clouds, clusters, CHMs, dataframes, images, SLURM logs) — these are
-all regenerable from a `run_clustering.py` run and get large fast, so they
+all regenerable from a `run_clustering.py` run and get large fast and are mainly used for debugging, so they
 stay out of git history. `results/` CSVs are small and are the actual
 experiment record, so those stay tracked.
 
@@ -106,7 +101,10 @@ experiment record, so those stay tracked.
 
 Edit `clustering/constants.py`:
 - `get_paths(trial_name)` — all input/output paths, derived from the trial name
+  - `PATHS["DATA"]` needs to have the .las files to run, at least for the first time.
+  - `PATHS[DSM]` can have a DSM if one is available, if not it can get created. 
 - `STEPS` — boolean flags controlling which clustering stages re-run
+  - Steps can only be skipped after being ran at least once, so the data can be saved.
 
 ### 3. Run clustering + labeling
 
@@ -115,9 +113,7 @@ sbatch clustering/shells/pinyons.sh
 ```
 
 See [`clustering/README.md`](clustering/README.md) for CLI args, the
-`params.txt` sweep format, and current known quirks (a couple of
-CLI params don't do what their names suggest yet — worth reading before
-you burn a sweep on the wrong one).
+`params.txt` sweep format, and current known quirks.
 
 ### 4. Train the classifier
 
@@ -137,7 +133,7 @@ spreading.
 exactly one detected cluster within `max_distance`.
 
 <div align="center">
-  <img src="assets/cluster_label_overlay.png" alt="Graph displaying clusters and labels collected from the field of site A in Sunset Crater, AZ." width="75%">
+  <img src="assets/root/cluster_label_overlay.png" alt="Graph displaying clusters and labels collected from the field of site A in Sunset Crater, AZ." width="75%">
 </div>
 Graph displaying clusters and labels collected from the field of site A in Sunset Crater, AZ.
 
@@ -148,13 +144,13 @@ Multiple clusters:       13  (5.5%)
 Matching score:          0.835
 ```
 
-Best achieved on Sunset Crater so far: **~0.83**.
+Best achieved on Sunset Crater so far: **~0.835**.
 
 ---
 
 ## The Data Bottleneck
 
-The labeled dataset is small — **~166 labeled clusters**, with **ponderosa
+The labeled dataset is small — **~236 labeled clusters**, with **ponderosa
 at only ~20 samples**. This has been the fundamental constraint on
 classifier performance; no model architecture, oversampling, weighting, or
 feature engineering approach tried so far has overcome it. More labeled
@@ -173,7 +169,7 @@ proximity filter in the label matcher handles the non-rectangular footprint.
 Species present: pinyon pine, juniper, ponderosa pine.
 
 <div align="center">
-  <img src="assets/SSC_google_maps_SC.png" alt="Aerial screen shot of site A in Sunset Crater, AZ. Taken on Google Maps." width="75%">
+  <img src="assets/root/SSC_google_maps_SC.png" alt="Aerial screen shot of site A in Sunset Crater, AZ. Taken on Google Maps." width="75%">
 </div>
 Aerial screen shot of site A in Sunset Crater, AZ. Taken on Google Maps.
 

@@ -46,3 +46,39 @@ def clean_up_pointcloud(point_cloud, green_threshold=0.01):
     cleaned_pc = point_cloud.select_by_index(np.where(mask)[0])
 
     return cleaned_pc
+
+
+""" IMPLEMENTATION in run_clustering:
+
+
+
+# ── clean pointcloud ──────────────────────────────────────────────────
+    # usually set to false, strips all non-green points, has not been part of the workflow for a while
+    # it does make the program a lot faster
+    # goes with cluster_pointcloud, not used with CHM workflow
+    if STEPS['Clean_Pointcloud']:
+        points = np.asarray(point_cloud.points)
+        print(f"Point count:  {len(points)}")
+        print(f"XYZ min: {points.min(axis=0)}")
+        print(f"XYZ max: {points.max(axis=0)}")
+        print(f"Any NaN: {np.any(np.isnan(points))}")
+
+        print("Cleaning up point cloud...")
+        point_cloud = clean_up_pointcloud(point_cloud, green_threshold=GREEN_THRESHOLD)
+        print("Point cloud successfully cleaned.\n")
+
+        print(point_cloud)
+
+        if SAVE:
+            print("Saving cleaned pointcloud...")
+            if not os.path.exists(os.path.dirname(PATHS['Cleaned_pcd'])):
+                os.makedirs(os.path.dirname(PATHS['Cleaned_pcd']))
+            o3d.io.write_point_cloud(PATHS['Cleaned_pcd'], point_cloud)
+            print("Cleaned pointcloud saved.\n")
+        else:
+            print("SAVE=False — skipping cleaned pointcloud write.\n")
+
+    else:
+        print("Unprocessed pointcloud being used. Pointcloud is not being 'cleaned.'\n") 
+        
+"""
