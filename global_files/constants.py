@@ -1,32 +1,14 @@
-# if we want to downsize or not
-DOWNSIZE = True
-
-# to get more printed messages
-SILENT = True
-
 # for doing/skipping sections of the main function
 STEPS = {
     # If you want to load the entire 'raw' pointcloud.
     # once it has been done & saved, does not need to be doen again.
     # Takes more than 10 minutes if true usually
-    'Load_Pointcloud':False,
+    'Load_Pointcloud':True,
 
     # making the canopy from height model with the unprocesses pcd
     # once done and saved, does not need to be ran again
     # takes less than 2 minutes 
     'Make_CHM':True,
-
-    # if the large pointcloud needs to be cleaned again
-    # very time consuming, more than 10 minutes
-    'Clean_Pointcloud':False,
-
-    # if the clusters should be created again
-    # a little time consuming, usually at least 3 minutes or so
-    'Make_Clusters':True,
-
-    # Evaluate the GPS points to cluster accuracy 
-    # A few seconds at most
-    'Cluster_accuracy':True,
     
 }
 
@@ -49,9 +31,11 @@ def get_paths(trial_name, scratch_dir='/scratch/hcr64/Pinyon-Detection/'):
 
     return {
 
-        # scratch folder paths
+        # scratch data folder paths
+        # these can both take in external data
+        # Data needs .las files, DSM can take an available dsm if possible
         'Data':             scratch_dir + 'point_cloud/', # .las files need to be here for processing
-        'DSM':              scratch_dir + '1_dsm/', # a DSM can be here if available, but if not one can be made
+        'DSM':              scratch_dir + '1_dsm/' + trial_name + '_dsm.tif', # a DSM can be here if available, but if not one can be made
 
 
         # everything below are for writing to disk. If already saved, 

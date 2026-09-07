@@ -3,7 +3,7 @@
 #SBATCH --output=/scratch/hcr64/%j.txt
 #SBATCH --error=/scratch/hcr64/%j.err
 #SBATCH --chdir=/home/hcr64/Pinyon-Detection/
-#SBATCH --time=3:00:00
+#SBATCH --time=6:00:00
 #SBATCH --mem=64G
 
 # access the venv
@@ -78,7 +78,7 @@ python -u clustering/run_clustering.py \
     --eps               $EPS \
     --green_threshold   $GREEN \
     --max_radius        $RADIUS \
-    --max_distance       $MAX_DISTANCE \
+    --max_distance      $MAX_DISTANCE \
     --min_points        $MIN_POINTS \
     --voxel_size        $VOXEL_SIZE \
     --min_peak_distance $MIN_PEAK_DISTANCE \

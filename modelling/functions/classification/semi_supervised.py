@@ -66,7 +66,7 @@ from sklearn.metrics import classification_report, f1_score, cohen_kappa_score
 # previously this was a separately hardcoded list that happened to agree
 # by luck (see modelling/README.md "Known Quirks").
 from functions.feature_config import FEATURES
-
+from functions.classification.semi_supervised import FEATURES as DEFAULT_FEATURES
 
 def run_label_spreading(df_deep, df_labels_matched, save_path=None,
                         alpha=0.2, gamma=0.5, max_iter=100,

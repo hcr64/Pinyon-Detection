@@ -54,7 +54,8 @@ DEFAULT_ENHANCEMENTS = {
 
 def train_tree_classifier(df_deep, df_labels_matched,
                           save_confusion_matrix_path=None,
-                          enhancements=None):
+                          enhancements=None,
+                          features=None):
     """
     Train and compare species classifiers with four enhancements over the
     baseline, then return the best-performing model.
@@ -101,6 +102,10 @@ def train_tree_classifier(df_deep, df_labels_matched,
     """
 
     ENHANCEMENTS = {**DEFAULT_ENHANCEMENTS, **(enhancements or {})}
+
+    # fall back on FEATURES if none provided
+    if features==None:
+        features = FEATURES
 
     # ── merge features with labels ────────────────────────────────────────────
     df = df_deep.merge(df_labels_matched[["file", "Name"]], on="file")

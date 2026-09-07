@@ -49,6 +49,8 @@ from global_files import *
 
 from functions import *
 
+from functions.feature_config import FEATURES
+
 print("Successfully loaded all packages.")
 
 
@@ -96,6 +98,42 @@ def main():
         print("df_clusters has no 'Name' column — run_clustering.py needs to "
               "run (and complete GPS label matching) before training.")
         return 1
+
+    # ── regenerate deep features if the cached CSV is missing any ─────────
+    # Lets you add a new feature to get_deep_cluster_features.py and pick it
+    # up here without re-running clustering (CHM/watershed/GPS matching are
+    # untouched by this — only shape/color/PCA features come from clusters).
+    missing_features = [f for f in FEATURES if f not in df_deep_clusters.columns]
+    if missing_features:
+        print(f"Missing features in cached deep_clusters.csv: {missing_features}")
+        print("Reloading raw clusters and regenerating deep features "
+              "(skipping clustering + GPS matching)...")
+
+        clusters = load_clusters(PATHS['Clusters'])
+        print(f"Loaded {len(clusters)} raw clusters from {PATHS['Clusters']}\n")
+
+        df_deep_clusters = make_deep_dataframe(clusters)
+        df_deep_clusters = engineer_features(df_deep_clusters)
+
+        still_missing = [f for f in FEATURES if f not in df_deep_clusters.columns]
+        if still_missing:
+            print(f"⚠  Still missing after regeneration: {still_missing} — "
+                  f"these need to be added to get_deep_cluster_features.py "
+                  f"itself, a rerun alone won't produce them.\n")
+
+        save_dataframes(df_clusters, df_deep_clusters, PATHS['Dataframes'])
+        print("Regenerated deep_clusters.csv saved to disk.\n")
+    else:
+        print("All expected features already present — no regeneration needed.\n")
+
+
+
+    # ── feature selection diagnostic ──────────────────────────────────────
+    importance_df, selected_features, comparison_df = select_best_features_rf(
+        df_deep_clusters,
+        df_clusters,
+        threshold="mean",
+    )
 
     # ── optional: point cloud embeddings ──────────────────────────────────
     # Only reload the raw .ply clusters if actually needed — this is the
@@ -154,7 +192,8 @@ def main():
         model, features, *_ = train_tree_classifier(
             df_deep_clusters,
             df_clusters,
-            save_confusion_matrix_path=PATHS['Images'] + 'confusion_matrix.png'
+            save_confusion_matrix_path=PATHS['Images'] + 'confusion_matrix.png',
+            features=selected_features,
         )
     else:
         model, features = run_advanced_classifiers(
@@ -184,6 +223,14 @@ def main():
             gamma=0.5,
             confidence_threshold=0.80,
         )
+
+    df_errors = inspect_misclassified_clusters(
+        df_deep_clusters,
+        df_clusters,
+        n_seeds=5,
+        true_label_filter="pinyon",   # focus on the pinyon→juniper/ponderosa errors
+        save_path=PATHS['Dataframes'] + 'pinyon_misclassification_report.csv'
+    )
 
     if "prob_pinyon" in df_deep_clusters.columns:
         confirmed_pinyons = df_deep_clusters[

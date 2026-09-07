@@ -42,10 +42,26 @@ FEATURES = [
     "chroma_b",
     "chroma_g_std",
     "exg_chroma",
-
     "top_red_exr",
     "top_blue_exb",
     "top_yellow_exy",
     "top_grey",
 
+    # footprint / irregularity
+    # "hull_area_ratio",
+    # "hull_volume_ratio",
+    "obb_aspect_ratio",
+    "n_density_peaks",
+
+    # vertical/radial profile
+    # "z_skewness",
+    # "z_kurtosis",
+    "trunk_gap_score",
+    "radial_density_gradient",
+
+    # colour, reframed
+    "hue_mean",
+    "hue_std",
+    "saturation_mean",
+    "bark_fraction", 
 ]
