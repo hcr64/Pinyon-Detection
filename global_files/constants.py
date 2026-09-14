@@ -3,7 +3,7 @@ STEPS = {
     # If you want to load the entire 'raw' pointcloud.
     # once it has been done & saved, does not need to be doen again.
     # Takes more than 10 minutes if true usually
-    'Load_Pointcloud':True,
+    'Load_Pointcloud':False,
 
     # making the canopy from height model with the unprocesses pcd
     # once done and saved, does not need to be ran again

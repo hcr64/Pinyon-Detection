@@ -93,6 +93,7 @@ def main():
     K                 = args.k
 
     MIN_DENSITY_RATIO = 1.5
+    CROWN_RADIUS=8
 
     MIN_HEIGHT      = args.min_height
     SEARCH_RADIUS_M = args.search_radius_m
@@ -225,7 +226,7 @@ def main():
         peak_coords,
         chm=chm,
         transform=transform,
-        crown_radius=MAX_RADIUS,
+        crown_radius=CROWN_RADIUS,
         min_points=MIN_POINTS
     )
     print("Point cloud clustered.\n")

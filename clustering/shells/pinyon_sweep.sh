@@ -8,7 +8,9 @@
 #SBATCH --mem=92G
 #SBATCH --partition=core
 
-source open3d_env/bin/activate
+module load miniforge3/26.3.2
+source "$(conda info --base)/etc/profile.d/conda.sh"
+conda activate open3d_env
 
 TRIAL_NAME="Sunset_sfm_trial"
 MESSAGE="N/A"
