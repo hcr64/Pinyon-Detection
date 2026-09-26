@@ -5,5 +5,5 @@ from .get_pointcloud_stats import clusters_to_dataframe, save_dataframes, load_d
 from .get_deep_cluster_features import make_deep_dataframe, engineer_features
 
 from .save_clusters import (
-    save_clusters, load_clusters, save_dataframes, load_dataframes
+    save_clusters, load_clusters, save_dataframes, load_dataframes, save_predictions
 )

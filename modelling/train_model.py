@@ -77,6 +77,12 @@ def main():
         help="Force retraining the autoencoder even if a checkpoint already "
              "exists at PATHS['Models']. Ignored unless --embeddings is set."
     )
+    parser.add_argument(
+    "--drought", action="store_true",
+    help="Also train a pinyon drought-tolerance (tolerant/susceptible) "
+         "classifier on the subset of pinyon clusters carrying a T/S "
+         "field label."
+    )    
     parser.add_argument("--embedding_dim", type=int, default=64)
     parser.add_argument("--embedding_n_points", type=int, default=256)
     parser.add_argument("--embedding_epochs", type=int, default=100)
@@ -224,6 +230,18 @@ def main():
             confidence_threshold=0.80,
         )
 
+    if args.drought:
+        if "drought_class" not in df_clusters.columns:
+            print("df_clusters has no 'drought_class' column — rerun "
+                "run_clustering.py so match_labels_to_clusters() can "
+                "populate it before training the drought classifier.")
+        else:
+            drought_model, drought_features, drought_metrics = train_drought_classifier(
+                df_deep_clusters,
+                df_clusters,
+                save_confusion_matrix_path=PATHS['Images'] + 'drought_confusion_matrix.png',
+            )
+
     df_errors = inspect_misclassified_clusters(
         df_deep_clusters,
         df_clusters,
@@ -240,6 +258,9 @@ def main():
         print(f"High confidence pinyons: {len(confirmed_pinyons)}")
 
     print(df_deep_clusters[["file", "predicted_label"]])
+
+    print("Saving predictions dataframe...")
+    save_predictions(df_deep_clusters, df_clusters, PATHS['Dataframes'])
 
     print("Program complete.")
     print("Time at Completion: " + datetime.now().strftime("%H:%M:%S"))

@@ -26,7 +26,7 @@ echo "pip:    $(which pip)"
 # the currently active python, sidestepping PATH ambiguity entirely
 python -m pip install --upgrade pip
 python -m pip install --no-cache-dir open3d
-python -m pip install numpy laspy pandas scipy scikit-learn matplotlib pyproj rasterio scikit-image imbalanced-learn xgboost lightgbm plotly
+python -m pip install numpy laspy pandas scipy scikit-learn matplotlib pyproj rasterio scikit-image imbalanced-learn xgboost lightgbm
 
 # install torch too
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu

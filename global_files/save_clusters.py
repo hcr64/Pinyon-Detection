@@ -144,3 +144,47 @@ def load_dataframes(save_path):
     print(f"Loaded df_deep_clusters ({len(df_deep_clusters)} rows) ← {deep_clusters_path}")
 
     return df_clusters, df_deep_clusters
+
+
+def save_predictions(df_deep_clusters, df_clusters, save_path, filename="predictions.csv"):
+    """
+    Save predicted species labels + cluster geometry/position to a single CSV,
+    so predictions can be visualized in Jupyter (joined against .ply files by
+    "file" index) without re-running the classifier.
+
+    Args:
+        df_deep_clusters (pd.DataFrame): Must have "file", "predicted_label",
+            and optionally "prob_<species>" / "semi_label" / "semi_confidence"
+            columns — i.e. df_deep_clusters after train_tree_classifier() or
+            run_advanced_classifiers() (+ optionally run_label_spreading()).
+        df_clusters (pd.DataFrame): Output of match_labels_to_clusters().
+            Must have "file"; "x_pos"/"y_pos"/"height"/"radius"/"Name"/
+            "label_distance" are merged in when present.
+        save_path (str): Directory to write the CSV into. Created if needed.
+        filename (str): Output filename. Default "predictions.csv".
+
+    Returns:
+        str: Full path to the saved CSV.
+
+    Requirements:
+        pandas, os
+    """
+    pred_cols = ["file", "predicted_label"]
+    pred_cols += [c for c in df_deep_clusters.columns if c.startswith("prob_")]
+    pred_cols += [c for c in ("semi_label", "semi_confidence")
+                  if c in df_deep_clusters.columns]
+
+    df_pred = df_deep_clusters[pred_cols].copy()
+
+    # bring in position/geometry + ground-truth label for context in Jupyter
+    merge_cols = ["file", "x_pos", "y_pos", "height", "radius",
+                  "n_points", "Name", "label_distance"]
+    merge_cols = [c for c in merge_cols if c in df_clusters.columns]
+    df_pred = df_pred.merge(df_clusters[merge_cols], on="file", how="left")
+
+    os.makedirs(save_path, exist_ok=True)
+    out_path = os.path.join(save_path, filename)
+    df_pred.to_csv(out_path, index=False)
+
+    print(f"Saved predictions ({len(df_pred)} rows) → {out_path}")
+    return out_path

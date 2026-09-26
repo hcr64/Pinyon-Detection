@@ -57,15 +57,76 @@ Requirements
 
 import numpy as np
 import open3d as o3d
+import os
+import re
 from scipy.spatial import KDTree
 from sklearn.cluster import MeanShift, estimate_bandwidth
 
 
-from functions.io.save_clusters_descriptive import save_clusters_descriptive
+# ── save-descriptive helper (deliberately inlined, not imported) ──────────────
+# Same logic as clustering/functions/io/save_clusters_descriptive.py.
+# Reimplemented here rather than imported so this file has no dependency on
+# `functions.io...` resolving as a bare top-level package — that only
+# happens automatically when this file runs as part of run_clustering.py's
+# own execution (Python auto-adds a script's own directory to sys.path).
+# Importing this module standalone (e.g. in a notebook) has no equivalent,
+# so the original absolute import broke outside that one specific context.
+# This mirrors the project's existing tolerance for this kind of small
+# duplication (see "FEATURES is duplicated, not shared" in
+# modelling/README.md, and _per_point_chroma in diagnose_cluster_bimodality.py).
 
-import sys
-sys.path.insert(0, "/home/hcr64/Pinyon-Detection")
-from global_files.save_clusters import save_clusters
+def _save_clusters_descriptive(clusters, filenames, save_path):
+    """
+    Save a list of point cloud clusters to disk with caller-supplied,
+    human-readable filenames instead of generic cluster0.ply, cluster1.ply
+    naming. Clears the destination folder before writing.
+
+    Args:
+        clusters (list of o3d.geometry.PointCloud): Clusters to save.
+        filenames (list of str): One filename per cluster, same length and
+            order as `clusters`. ".ply" appended if not already present.
+            Sanitised but NOT deduplicated — pass unique names.
+        save_path (str): Directory to write .ply files into. Created
+            automatically if it does not exist.
+
+    Returns:
+        list of str: Full paths written, in input order.
+
+    Requirements:
+        open3d, os, re
+    """
+    if len(clusters) != len(filenames):
+        raise ValueError(
+            f"_save_clusters_descriptive: clusters ({len(clusters)}) and "
+            f"filenames ({len(filenames)}) must be the same length"
+        )
+
+    if os.path.exists(save_path):
+        for f in os.listdir(save_path):
+            os.remove(os.path.join(save_path, f))
+    else:
+        os.makedirs(save_path)
+
+    illegal = re.compile(r'[<>:"/\\|?*]')
+
+    written = []
+    seen = set()
+    for cluster, name in zip(clusters, filenames):
+        clean = illegal.sub("_", name)
+        if not clean.endswith(".ply"):
+            clean += ".ply"
+
+        if clean in seen:
+            print(f"Warning: duplicate filename '{clean}' — this write will "
+                  f"overwrite a previous cluster with the same name.")
+        seen.add(clean)
+
+        out_path = os.path.join(save_path, clean)
+        o3d.io.write_point_cloud(out_path, cluster)
+        written.append(out_path)
+
+    print(f"All {len(clusters)} clusters saved to {save_path} with descriptive names")
+    return written
 
 
 # ── colour helper (deliberately duplicated, not imported) ─────────────────────
@@ -351,7 +412,7 @@ def split_large_clusters(clusters, min_points=10, max_radius=2.0,
 
     # save pre-split clusters locally if a path was given
     if save_pre_split_path is not None:
-        save_clusters_descriptive(pre_split_clusters, pre_split_names, save_pre_split_path)
+        _save_clusters_descriptive(pre_split_clusters, pre_split_names, save_pre_split_path)
         print(f"Saved {len(pre_split_clusters)} pre-split clusters to {save_pre_split_path}")
 
     if use_color and n_color_fallback > 0:

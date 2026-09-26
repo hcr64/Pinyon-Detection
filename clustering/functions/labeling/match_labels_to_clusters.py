@@ -93,8 +93,19 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
         df = pd.read_csv(path)
         df = df[~df["Name"].str.lower().str.contains("dead", na=False)]
         df = df[~df["Name"].str.lower().str.contains("point", na=False)]
-        df["Name"] = df["Name"].str.split().str[0].str.lower().str.strip()
+
+        raw_names = df["Name"].astype(str).str.strip()
+        tokens = raw_names.str.split()
+
+        df["Name"] = tokens.str[0].str.lower().str.strip()
         df["Name"] = df["Name"].replace({"junioer": "juniper"})
+
+        tag = tokens.str[1:].str.join(" ").str.strip().str.upper()
+        tag_parts = tag.str.extract(r'^([TS])\s*(\d{1,2})?$')
+
+        df["drought_class"] = tag_parts[0].map({"T": "tolerant", "S": "susceptible"})
+        df["drought_level"] = pd.to_numeric(tag_parts[1], errors="coerce")
+
         df = df[df["Name"].isin(["pinyon", "juniper", "ponderosa"])].reset_index(drop=True)
         return df
 
@@ -212,16 +223,19 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
 
     df_clusters["Name"]           = "unknown"
     df_clusters["label_distance"] = np.inf
+    df_clusters["drought_class"]  = None
+    df_clusters["drought_level"]  = np.nan
 
     n_assigned = 0
     n_rejected = 0
 
     for g, c in zip(gps_idx, cluster_idx):
-        # compute actual Euclidean distance for the max_distance gate
         actual_dist = np.linalg.norm(csv_coords[g] - cluster_coords[c])
         if actual_dist <= max_distance:
             df_clusters.loc[c, "Name"]           = df_labels["Name"].iloc[g]
-            df_clusters.loc[c, "label_distance"]  = actual_dist
+            df_clusters.loc[c, "label_distance"] = actual_dist
+            df_clusters.loc[c, "drought_class"]  = df_labels["drought_class"].iloc[g]
+            df_clusters.loc[c, "drought_level"]  = df_labels["drought_level"].iloc[g]
             n_assigned += 1
         else:
             n_rejected += 1
