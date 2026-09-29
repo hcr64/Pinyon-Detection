@@ -85,7 +85,7 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
         scipy.optimize.linear_sum_assignment
     """
 
-    graph_title = f"GPS_Clusters_{job_id}"
+    graph_title = f"GPS_Clusters"
 
     # ── load and normalize labels ─────────────────────────────────────────────
 
@@ -102,6 +102,10 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
 
         tag = tokens.str[1:].str.join(" ").str.strip().str.upper()
         tag_parts = tag.str.extract(r'^([TS])\s*(\d{1,2})?$')
+        
+        unparsed = raw_names[(tag != "") & tag_parts[0].isna()]
+        print("Tags present but NOT parsed:", unparsed.unique())
+        print("Parsed drought_class counts:\n", tag_parts[0].value_counts(dropna=False))
 
         df["drought_class"] = tag_parts[0].map({"T": "tolerant", "S": "susceptible"})
         df["drought_level"] = pd.to_numeric(tag_parts[1], errors="coerce")
@@ -115,6 +119,9 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
         df_labels_2 = load_and_filter(csv_path_2)
         df_labels = pd.concat([df_labels, df_labels_2], ignore_index=True)
         print(f"Merged labels from both CSVs.")
+
+    key = df_labels[["Latitude", "Longitude"]].round(5)   # ~1 m
+    print("Duplicate coords across CSVs:", key.duplicated(keep=False).sum())
 
     print("Num Filtered Labels:", len(df_labels))
     print(df_labels["Name"].value_counts())
@@ -232,6 +239,7 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
     for g, c in zip(gps_idx, cluster_idx):
         actual_dist = np.linalg.norm(csv_coords[g] - cluster_coords[c])
         if actual_dist <= max_distance:
+            print("drought_class:", df_labels["drought_class"].iloc[g], "drought_level:", df_labels["drought_level"].iloc[g])
             df_clusters.loc[c, "Name"]           = df_labels["Name"].iloc[g]
             df_clusters.loc[c, "label_distance"] = actual_dist
             df_clusters.loc[c, "drought_class"]  = df_labels["drought_class"].iloc[g]

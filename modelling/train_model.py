@@ -83,6 +83,14 @@ def main():
          "classifier on the subset of pinyon clusters carrying a T/S "
          "field label."
     )    
+    parser.add_argument(
+    "--combined", action="store_true",
+    help="Train a single 4-class classifier (juniper / ponderosa / "
+         "pinyon_tolerant / pinyon_susceptible) instead of separate "
+         "species and drought models. Pinyon clusters without a T/S "
+         "tag are excluded from training."
+    )
+
     parser.add_argument("--embedding_dim", type=int, default=64)
     parser.add_argument("--embedding_n_points", type=int, default=256)
     parser.add_argument("--embedding_epochs", type=int, default=100)
@@ -236,12 +244,27 @@ def main():
                 "run_clustering.py so match_labels_to_clusters() can "
                 "populate it before training the drought classifier.")
         else:
+            print()
+            print("Training drought model...")
+            print()
             drought_model, drought_features, drought_metrics = train_drought_classifier(
                 df_deep_clusters,
                 df_clusters,
                 save_confusion_matrix_path=PATHS['Images'] + 'drought_confusion_matrix.png',
             )
 
+    if args.combined:
+        if "drought_class" not in df_clusters.columns:
+            print("df_clusters has no 'drought_class' column — rerun "
+                "run_clustering.py so match_labels_to_clusters() can "
+                "populate it before training the combined classifier.")
+        else:
+            combined_model, combined_features, combined_metrics = train_combined_classifier(
+                df_deep_clusters,
+                df_clusters,
+                save_confusion_matrix_path=PATHS['Images'] + 'combined_confusion_matrix.png',
+            )
+        
     df_errors = inspect_misclassified_clusters(
         df_deep_clusters,
         df_clusters,
@@ -261,7 +284,8 @@ def main():
 
     print("Saving predictions dataframe...")
     save_predictions(df_deep_clusters, df_clusters, PATHS['Dataframes'])
-
+    print()
+    
     print("Program complete.")
     print("Time at Completion: " + datetime.now().strftime("%H:%M:%S"))
 

@@ -137,7 +137,7 @@ def main():
     SILENT = True
 
     # ── load raw point cloud ─────────────────────────────────────────────
-    if STEPS['Load_Pointcloud']:
+    if STEPS['Load_Pointcloud'] and STEPS['Make_Raw_Clusters']:
         print('Loading point cloud...')
         point_cloud = las_folder_to_pointcloud(
             PATHS['Data'],
@@ -168,7 +168,7 @@ def main():
 
 
     # ── CHM ───────────────────────────────────────────────────────────────
-    if STEPS['Make_CHM']:
+    if STEPS['Make_CHM'] and STEPS['Make_Raw_Clusters']:
         # downsize the pointcloud, can take a while
         print("Downsizing pointcloud...")
         point_cloud = point_cloud.voxel_down_sample(voxel_size=VOXEL_SIZE)
@@ -207,30 +207,47 @@ def main():
     ### With evertyhting loaded in, the clustering begins
     ### Very time consuming, can take up to an hour or longer in some cases
 
-    # find peaks in the caonpy height model, use to cluster later
-    print("Finding peaks in CHM...")
-    peak_coords, peak_heights = find_chm_peaks(
-        chm,
-        transform,
-        min_height=MIN_HEIGHT,
-        search_radius_m=SEARCH_RADIUS_M,
-        resolution=CHM_RESOLUTION,
-        smooth_sigma=SMOOTH_SIGMA)
-    print()
+    # make the clusters
+    if STEPS['Make_Raw_Clusters']:
+        # find peaks in the caonpy height model, use to cluster later
+        print("Finding peaks in CHM...")
+        peak_coords, peak_heights = find_chm_peaks(
+            chm,
+            transform,
+            min_height=MIN_HEIGHT,
+            search_radius_m=SEARCH_RADIUS_M,
+            resolution=CHM_RESOLUTION,
+            smooth_sigma=SMOOTH_SIGMA)
+        print()
 
 
-    # cluster the chm by the peaks. Takes a while
-    print("Clustering point cloud...")
-    clusters = cluster_by_chm_peaks(
-        point_cloud,
-        peak_coords,
-        chm=chm,
-        transform=transform,
-        crown_radius=CROWN_RADIUS,
-        min_points=MIN_POINTS
-    )
-    print("Point cloud clustered.\n")
+        # cluster the chm by the peaks. Takes a while
+        print("Clustering point cloud...")
+        clusters = cluster_by_chm_peaks(
+            point_cloud,
+            peak_coords,
+            chm=chm,
+            transform=transform,
+            crown_radius=CROWN_RADIUS,
+            min_points=MIN_POINTS
+        )
+        print("Point cloud clustered.\n")
 
+        # save new clusters to the raw clusters path
+        save_clusters(clusters, PATHS['Raw_Clusters'])
+
+    # load in the raw clusters from disk
+    else:
+        print(f"Reading in raw clusters... (from {PATHS['Raw_Clusters']})")
+        if os.path.exists(os.path.dirname(PATHS['Raw_Clusters'])):
+            clusters = load_clusters(PATHS['Raw_Clusters'])
+            print(f"Raw clusters cloud read in. ({PATHS['Raw_Clusters']})")
+        else:
+            print(f"Could not find raw cluster save path ({PATHS['Raw_Clusters']}). Exiting program...")
+            return 1
+        print()
+
+    # filter clusters by height
     MIN_POINT_HEIGHT = 1.5
     clusters = [
         c for c in clusters

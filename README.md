@@ -1,6 +1,6 @@
 # Pinyon-Detection
 
-A research project intended to identify drought-tolerant pinyon pines from drone-collected SFM pointclouds processed using PixMapper4D. Currently, data has only been collected from a field site at **Sunset Crater, AZ**. The processing is done on the **Monsoon** SLURM HPC cluster at Northern Arizona University. 
+A research project intended to identify drought-tolerant pinyon pines from drone-collected Structure-From-Motion pointclouds processed using PixMapper4D. Currently, data has only been collected from a field site at **Sunset Crater, AZ**. The processing is done on the **Monsoon** SLURM HPC cluster at Northern Arizona University. 
 
 <div align="center">
   <img src="assets/root/SSC_pinyon1.jpg" alt="A drought susceptable pinyon pine at site A in Sunset Crater, AZ." width="75%">
@@ -25,9 +25,9 @@ The project is split into two independent stages:
   score. Depending on parameters, can take anywhere from 25 minutes to an hour. 
   See [`clustering/README.md`](clustering/README.md).
 
-- **`modelling/`** — species classification on the labeled clusters
+- **`modelling/`** — species classification on the labeled clusters, and drought tolerance on pinyons.
   `clustering/` produced. Run via `train_model.py`, fast enough to iterate
-  on interactively. Currently only trained on species, not drough tolerance.
+  on interactively.
   Takes a lot less time to run, usually less than 5 minutes. See [`modelling/README.md`](modelling/README.md).
 
 These used to be one script (`main.py`). They were split apart because clustering was taking too long and was not required for training the model. The main file became too cluttered, and was clearly two seperate parts. 
@@ -102,7 +102,7 @@ experiment record, so those stay tracked.
 Edit `clustering/constants.py`:
 - `get_paths(trial_name)` — all input/output paths, derived from the trial name
   - `PATHS["DATA"]` needs to have the .las files to run, at least for the first time.
-  - `PATHS[DSM]` can have a DSM if one is available, if not it can get created. 
+  - `PATHS["DSM"]` can have a DSM if one is available, if not it can get created. 
 - `STEPS` — boolean flags controlling which clustering stages re-run
   - Steps can only be skipped after being ran at least once, so the data can be saved.
 
@@ -174,6 +174,19 @@ Species present: pinyon pine, juniper, ponderosa pine.
 Aerial screen shot of site A in Sunset Crater, AZ. Taken on Google Maps.
 
 ---
+
+## To Do List 
+
+- **Seperate Overlapping Trees (Current):** What I am currently working towards, there are a few trees that physically overlap that we gathered labels for. Overlapping trees are common, so having a method of seperation would be great. I am trying approaches based on seperating via hues, with some progress being made. After seperation, labels will need to be reassigned. 
+
+- **Collect & Implement Thermal Measurements:** Thermal data of the field site will hopefully help fursther strengthen species identification, and possibly even drought tolerance in pinyons. Goal to collect it by end of September 2026.
+
+- **Modelling Both Species & Drought Tolerance:** I have only worked on species modelling, and will begin pinyon tolerance modelling after the seperation of overlapping trees concludes. A big issue in the modelling currently is overlapping trees having traits of two trees, but only one of the labels, and the account for all mismatched clusters so far. Modelling drought tolerance is the original end goal of the project, so some more questions may get tacked on after this. 
+
+<div align="center">
+  <img src="assets/root/confusion_matrix.png" alt="Best scoring model's confusion matrix as of Sep. 2026" width="75%">
+</div>
+Best scoring model's confusion matrix as of Sep. 2026
 
 ## See Also
 

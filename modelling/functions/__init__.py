@@ -12,3 +12,4 @@ from .classification.advanced_classifiers import run_advanced_classifiers
 from .classification.semi_supervised import run_label_spreading
 from .classification.inspect_misclassifications import inspect_misclassified_clusters
 from .classification.train_drought_classifier import train_drought_classifier
+from .classification.train_combined_classifier import train_combined_classifier, build_combined_label

@@ -60,13 +60,7 @@ need the predictions saved, add a `save_dataframes()` call at the end of
 
 ## The data bottleneck
 
-The labeled dataset is small: **~166 labeled clusters total**, with
-**ponderosa at only ~20 samples**. This has been the binding constraint on
-classifier performance — no amount of model architecture change, class
-weighting, SMOTE oversampling, feature engineering, or ensembling has
-overcome it in testing. Treat any single classifier comparison run on this
-data with appropriate skepticism, especially per-class metrics for
-ponderosa, where 5-fold CV puts only ~4 samples per fold.
+
 
 ---
 
@@ -87,7 +81,15 @@ these directly in `train_tree_classifier.py` — they aren't currently exposed
 as CLI flags.
 
 ---
+## Normal Features (Species Classifier)
+Without any flags, the a species classifier runs, that classifies trees as pinyons, ponderosas, and junipers, trained on labeled clusters. It runs a hanful of models, and outputs a confusion matrix of the best performer. 
 
+<div align="center">
+  <img src="../assets/modelling/confusion_matrix.png" alt="Species classifier confusion matrix of SVM_RBF (see advanced classifiers) model." width="75%">
+</div>
+Species classifier confusion matrix of SVM_RBF (see advanced classifiers) model.
+
+---
 ## Advanced classifiers (`--advanced`)
 
 Adds XGBoost, LightGBM, a soft-voting ensemble (RF+GB+SVM), an MLP, and a
@@ -108,7 +110,21 @@ metric as a consistency check, not a real accuracy estimate — the model saw
 those labels during fitting.
 
 ---
+## Drought Tolerance Prediction (`--drought`)
+The pinyon drought tolerance prediction model takes only S for drought susceptible or T for drought tolerant, and predicts those. In the GPS labels, there is also a number 1-10 along with the letter as to how tolerant or susceptible it is. the lower the number the more drought tolerant, higher is more drought susceptible.
 
+<div align="center">
+  <img src="../assets/modelling/drought_confusion_matrix.png" alt="Combined species classifier and pinyon drought tolerance confusion matrix of SVM_RBF (see advanced classifiers) model." width="75%">
+</div>
+Above: pinyon drought tolerance confusion matrix. 
+
+
+<div align="center">
+  <img src="../assets/modelling/combined_confusion_matrix.png" alt="Combined species classifier and pinyon drought tolerance confusion matrix of SVM_RBF (see advanced classifiers) model." width="75%">
+</div>
+Combined species classifier and pinyon drought tolerance confusion matrix of SVM_RBF (see advanced classifiers) model.
+
+---
 ## Known Quirks
 
 - **`FEATURES` is duplicated, not shared.** `train_tree_classifier.py`,

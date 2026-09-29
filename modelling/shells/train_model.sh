@@ -14,4 +14,6 @@ TRIAL_NAME="Sunset_sfm_trial"
 
 python -u modelling/train_model.py \
     --trial_name $TRIAL_NAME \
-    --embeddings
+    --embeddings \
+    --drought \
+    --combined
