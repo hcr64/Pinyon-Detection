@@ -199,8 +199,8 @@ def filter_cluster(pcd, min_height=1.0, min_radius=0.3):
 
 # ── main entry point ────────────────────────────────────────────────────────
 
-def split_large_clusters(clusters, min_points=10, max_radius=2.0,
-                         min_peak_distance=3.0, k=50, min_density_ratio=1.5,
+def split_large_clusters(clusters, min_points=100, max_radius=2.0,
+                         min_peak_distance=1.0, k=50, min_density_ratio=1.5,
                          save_pre_split_path=None,
                          use_color=False, color_weight=10.0,
                          color_channels=("chroma_g", "chroma_r", "chroma_b"),

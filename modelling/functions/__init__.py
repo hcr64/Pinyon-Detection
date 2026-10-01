@@ -5,6 +5,7 @@ from .features.pointcloud_autoencoder import (
     train_autoencoder, load_autoencoder, extract_embeddings, PointCloudDataset
 )
 from .features.select_best_features_rf import select_best_features_rf
+from .features.plot_prediction_map import plot_prediction_map
 
 # classification
 from .classification.train_tree_classifier import train_tree_classifier

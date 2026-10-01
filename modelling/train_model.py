@@ -38,6 +38,7 @@ print("Loading packages...")
 
 import argparse
 import os
+import pandas as pd
 from datetime import datetime
 
 # import global files, includes constants
@@ -99,6 +100,8 @@ def main():
     TRIAL_NAME = args.trial_name
     PATHS = get_paths(TRIAL_NAME)
 
+    drought_model, drought_features = None, None
+
     print()
     print("TRIAL_NAME:", TRIAL_NAME)
     print("Program Start Time: " + datetime.now().strftime("%H:%M:%S"))
@@ -107,6 +110,13 @@ def main():
     print("Reading in feature dataframes...")
     df_clusters, df_deep_clusters = load_dataframes(PATHS['Dataframes'])
     print("Dataframes read in.\n")
+
+    # make sure emeddings do not overlap from previous saves
+    p = PATHS['Dataframes'] + "deep_clusters.csv"
+    df = pd.read_csv(p)
+    df = df.drop(columns=[c for c in df.columns if c.startswith("emb_")])
+    df.to_csv(p, index=False)
+
 
     if "Name" not in df_clusters.columns:
         print("df_clusters has no 'Name' column — run_clustering.py needs to "
@@ -179,6 +189,12 @@ def main():
 
         print("Extracting embeddings...")
         df_embeddings = extract_embeddings(clusters, encoder, n_points=n_points)
+
+        # remove stale embedding columns (emb_N, emb_N_x, emb_N_y) from earlier runs
+        stale = [c for c in df_deep_clusters.columns if c.startswith("emb_")]
+        if stale:
+            print(f"Dropping {len(stale)} stale embedding columns from cached df_deep_clusters")
+            df_deep_clusters = df_deep_clusters.drop(columns=stale)
 
         before_cols = set(df_deep_clusters.columns)
         df_deep_clusters = df_deep_clusters.merge(df_embeddings, on="file")
@@ -253,7 +269,14 @@ def main():
                 save_confusion_matrix_path=PATHS['Images'] + 'drought_confusion_matrix.png',
             )
 
-    if args.combined:
+            if drought_model is not None:
+                pin = df_deep_clusters["predicted_label"] == "pinyon"
+                df_deep_clusters["predicted_drought_class"] = None
+                df_deep_clusters.loc[pin, "predicted_drought_class"] = drought_model.predict(
+                    df_deep_clusters.loc[pin, drought_features]
+                )
+
+        #if args.combined:
         if "drought_class" not in df_clusters.columns:
             print("df_clusters has no 'drought_class' column — rerun "
                 "run_clustering.py so match_labels_to_clusters() can "
@@ -280,7 +303,22 @@ def main():
         ]
         print(f"High confidence pinyons: {len(confirmed_pinyons)}")
 
+    # save the dataframes before exit
+    save_dataframes(df_clusters, df_deep_clusters, PATHS['Dataframes'])
+
     print(df_deep_clusters[["file", "predicted_label"]])
+
+    # make the prediction map
+    print("Making prediction map...")
+    plot_prediction_map(
+        df_deep_clusters,
+        df_clusters,
+        save_path=PATHS['Images'],
+        chm_path=PATHS['CHM'],
+        min_confidence=0.95,   # set to None to plot every cluster
+    )
+    print(f"Prediction map saved to {PATHS['Images']}.\n")
+
 
     print("Saving predictions dataframe...")
     save_predictions(df_deep_clusters, df_clusters, PATHS['Dataframes'])

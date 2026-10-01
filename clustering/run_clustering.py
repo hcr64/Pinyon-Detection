@@ -276,6 +276,7 @@ def main():
         min_peak_distance=MIN_PEAK_DISTANCE,
         k=K,
         min_density_ratio=MIN_DENSITY_RATIO,
+        use_color=True,
         # split_large_clusters() calls save_clusters_descriptive() internally
         # whenever save_pre_split_path is not None — pass None during sweeps
         # to skip that write entirely rather than gating it after the fact

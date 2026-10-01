@@ -1,4 +1,4 @@
-# Pinyon-Detection — Species Classification
+# Pinyon-Detection — Modelling
 
 This is the cheap, iterate-quickly half of the pipeline: trains a species
 classifier (pinyon / juniper / ponderosa) on GPS-labeled clusters. Reads
@@ -58,9 +58,10 @@ need the predictions saved, add a `save_dataframes()` call at the end of
 
 ---
 
-## The data bottleneck
+## Issues with the data
+There are currently only 294 total GPS recordings, with some of the points being discarded due to entry error (i.e "pinyon juniper" or "pinyon ponderosa"). Ponderosas are also heavily underrepresented in the data, with there only being about 20 total entries.
 
-
+Another issue discussed in the root README, are overlapping trees in a single cluster. Not only do they mess with label assignments in the clustering process, but also with model training. In the specification, there are a handful of these clusters that get constanly missclassified, and they likely mess up pinyon drought tolerance classification too. 
 
 ---
 
@@ -114,15 +115,18 @@ those labels during fitting.
 The pinyon drought tolerance prediction model takes only S for drought susceptible or T for drought tolerant, and predicts those. In the GPS labels, there is also a number 1-10 along with the letter as to how tolerant or susceptible it is. the lower the number the more drought tolerant, higher is more drought susceptible.
 
 <div align="center">
-  <img src="../assets/modelling/drought_confusion_matrix.png" alt="Combined species classifier and pinyon drought tolerance confusion matrix of SVM_RBF (see advanced classifiers) model." width="75%">
+  <img src="../assets/modelling/drought_confusion_matrix.png" alt="pinyon drought tolerant/susceptible confusion matrix." width="75%">
 </div>
-Above: pinyon drought tolerance confusion matrix. 
+Above: pinyon drought tolerant/susceptible confusion matrix. 
 
 
 <div align="center">
   <img src="../assets/modelling/combined_confusion_matrix.png" alt="Combined species classifier and pinyon drought tolerance confusion matrix of SVM_RBF (see advanced classifiers) model." width="75%">
 </div>
 Combined species classifier and pinyon drought tolerance confusion matrix of SVM_RBF (see advanced classifiers) model.
+
+
+Both models run via the --drought flag. 
 
 ---
 ## Known Quirks
@@ -132,8 +136,3 @@ Combined species classifier and pinyon drought tolerance confusion matrix of SVM
   `FEATURES` list. They currently agree, but there's no single source of
   truth — if you add an engineered feature in
   `get_deep_cluster_features.py`, you need to add it to all three by hand.
-- **`train_model.py` doesn't re-save predictions.** `predicted_label` /
-  `prob_<species>` columns are added to `df_deep_clusters` in memory only.
-  If you want them available on a later run without recomputing, add a
-  `save_dataframes()` call before the script exits.
-- **`--advanced` requires packages not in the shared venv setup.** See above.
