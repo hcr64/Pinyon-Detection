@@ -4,7 +4,7 @@
 
 # today
 echo "********** Today **********"
-sacct -u hcr64 --starttime=today --format=JobID,JobName,State,Elapsed,End | grep pinyon_m
+sacct -u hcr64 --starttime=today --format=JobID,JobName,State,Elapsed,End
 echo 
 
 # jobs from yesterday

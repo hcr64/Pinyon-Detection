@@ -14,7 +14,8 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
                               graph_save_path="/home/hcr64/Pinyon-Detection/images/",
                               multi_match_save_path=None,
                               clusters=None,
-                              csv_path_2=None):
+                              csv_path_2=None,
+                              silent=True):
     """
     Match GPS species labels to detected clusters via optimal one-to-one assignment,
     weighted by a Gaussian GPS error model.
@@ -239,7 +240,8 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
     for g, c in zip(gps_idx, cluster_idx):
         actual_dist = np.linalg.norm(csv_coords[g] - cluster_coords[c])
         if actual_dist <= max_distance:
-            print("drought_class:", df_labels["drought_class"].iloc[g], "drought_level:", df_labels["drought_level"].iloc[g])
+            if not silent:
+                print("drought_class:", df_labels["drought_class"].iloc[g], "drought_level:", df_labels["drought_level"].iloc[g])
             df_clusters.loc[c, "Name"]           = df_labels["Name"].iloc[g]
             df_clusters.loc[c, "label_distance"] = actual_dist
             df_clusters.loc[c, "drought_class"]  = df_labels["drought_class"].iloc[g]

@@ -91,15 +91,12 @@ def find_chm_peaks(chm, transform, min_height=1.5, search_radius_m=1.5, resoluti
     # ── suppress duplicate peaks in flat-top regions ─────────────────────────
     # label connected regions of equal-valued local maxima, keep only centroid
     labeled, n_regions = label(peak_mask)
-    rows, cols = [], []
-    for region_id in range(1, n_regions + 1):
-        region_pixels = np.argwhere(labeled == region_id)
-        centroid = region_pixels.mean(axis=0)          # float row, col
-        rows.append(centroid[0])
-        cols.append(centroid[1])
+    r, c = np.nonzero(peak_mask)            # only the (few) peak pixels
+    lab = labeled[r, c]
+    counts = np.bincount(lab, minlength=n_regions + 1)[1:]
+    rows = np.bincount(lab, weights=r, minlength=n_regions + 1)[1:] / counts
+    cols = np.bincount(lab, weights=c, minlength=n_regions + 1)[1:] / counts
 
-    rows = np.array(rows)
-    cols = np.array(cols)
 
     if len(rows) == 0:
         print("No CHM peaks found — try lowering min_height, search_radius_m, "

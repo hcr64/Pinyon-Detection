@@ -3,7 +3,7 @@
 #SBATCH --output=clustering/logs/job_%A_%a.out
 #SBATCH --error=clustering/logs/job_%A_%a.err
 #SBATCH --chdir=/home/hcr64/Pinyon-Detection/
-#SBATCH --array=1-30
+#SBATCH --array=1-12
 #SBATCH --time=03:00:00
 #SBATCH --mem=92G
 #SBATCH --partition=core
@@ -32,10 +32,10 @@ done
 bash shells/clear_garbage_files.sh
 
 # clear out logs and images folder before beginning
-find clustering/trial_data/$TRIAL_NAME/images/* -mmin +$MINS -type f -delete
+# find clustering/trial_data/$TRIAL_NAME/images/* -mmin +$MINS -type f -delete
 
 # print a divider in the results file 
-RESULTS_PATH=clustering/trial_data/$TRIAL_NAME/results/results_Jul18.csv
+RESULTS_PATH=trial_data/$TRIAL_NAME/results/results.csv
 if [ "${SLURM_ARRAY_TASK_ID}" == "${SLURM_ARRAY_TASK_MIN}" ]; then
     mkdir -p "$(dirname "$RESULTS_PATH")"
     {

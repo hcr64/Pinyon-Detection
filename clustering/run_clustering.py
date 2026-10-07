@@ -280,7 +280,8 @@ def main():
         # split_large_clusters() calls save_clusters_descriptive() internally
         # whenever save_pre_split_path is not None — pass None during sweeps
         # to skip that write entirely rather than gating it after the fact
-        save_pre_split_path=PATHS['PS_clusters'] if SAVE else None
+        save_pre_split_path=PATHS['PS_clusters'] if SAVE else None,
+        silent=SILENT
     )
     print("Clusters split.\n")
 
@@ -326,7 +327,8 @@ def main():
         # save_multimatch_clusters() writes one .ply folder per ambiguous
         # GPS label — skip during sweeps the same way as the other writes
         multi_match_save_path=PATHS["MM_save_path"] if SAVE else None,
-        graph_subtitle=f"EPS:{EPS}-MR:{MAX_RADIUS}-GT:{GREEN_THRESHOLD}-MPts:{MIN_POINTS}-MD:{MAX_DISTANCE}-K:{K}-MPD:{MIN_PEAK_DISTANCE}-GPSs:{GPS_SIGMA}-SMs:{SMOOTH_SIGMA}"
+        graph_subtitle=f"EPS:{EPS}-MR:{MAX_RADIUS}-GT:{GREEN_THRESHOLD}-MPts:{MIN_POINTS}-MD:{MAX_DISTANCE}-K:{K}-MPD:{MIN_PEAK_DISTANCE}-GPSs:{GPS_SIGMA}-SMs:{SMOOTH_SIGMA}",
+        silent=SILENT
     )
     print("Labels assigned.\n")
 

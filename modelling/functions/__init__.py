@@ -14,3 +14,4 @@ from .classification.semi_supervised import run_label_spreading
 from .classification.inspect_misclassifications import inspect_misclassified_clusters
 from .classification.train_drought_classifier import train_drought_classifier
 from .classification.train_combined_classifier import train_combined_classifier, build_combined_label
+from .classification.inspect_drought_misclassifications import inspect_drought_misclassified_clusters

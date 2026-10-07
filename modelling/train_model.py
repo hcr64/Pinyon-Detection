@@ -276,17 +276,24 @@ def main():
                     df_deep_clusters.loc[pin, drought_features]
                 )
 
+            df_drought_errors = inspect_drought_misclassified_clusters(
+                df_deep_clusters,
+                df_clusters,
+                n_seeds=5,
+                save_path=PATHS['Dataframes'] + 'pinyon_drought_misclassification_report.csv',
+            )
+
         #if args.combined:
         if "drought_class" not in df_clusters.columns:
             print("df_clusters has no 'drought_class' column — rerun "
                 "run_clustering.py so match_labels_to_clusters() can "
                 "populate it before training the combined classifier.")
-        else:
+        """else:
             combined_model, combined_features, combined_metrics = train_combined_classifier(
                 df_deep_clusters,
                 df_clusters,
                 save_confusion_matrix_path=PATHS['Images'] + 'combined_confusion_matrix.png',
-            )
+            )"""
         
     df_errors = inspect_misclassified_clusters(
         df_deep_clusters,

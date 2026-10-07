@@ -204,7 +204,8 @@ def split_large_clusters(clusters, min_points=100, max_radius=2.0,
                          save_pre_split_path=None,
                          use_color=False, color_weight=10.0,
                          color_channels=("chroma_g", "chroma_r", "chroma_b"),
-                         force_check_indices=None):
+                         force_check_indices=None, 
+                         silent=True):
     """
     Split oversized clusters that likely contain multiple merged tree crowns.
 
@@ -348,8 +349,9 @@ def split_large_clusters(clusters, min_points=100, max_radius=2.0,
             continue
 
         mode_str = "XY+colour" if cluster_use_color else "XY-only"
-        print(f"Found {n_peaks} density peaks ({mode_str}) in cluster "
-              f"(radius={radius:.2f}m), attempting Mean Shift split...")
+        if not silent:
+            print(f"Found {n_peaks} density peaks ({mode_str}) in cluster "
+                f"(radius={radius:.2f}m), attempting Mean Shift split...")
 
         # ── build the feature space Mean Shift actually splits on ─────────────
         split_features = points[:, :2]  # xy, always the base
@@ -387,8 +389,9 @@ def split_large_clusters(clusters, min_points=100, max_radius=2.0,
             f"{'_color' if cluster_use_color else ''}"
         )
 
-        print(f"Mean Shift split cluster (radius={radius:.2f}m, {mode_str}) "
-              f"into {n_trees} sub-clusters")
+        if not silent:
+            print(f"Mean Shift split cluster (radius={radius:.2f}m, {mode_str}) "
+                f"into {n_trees} sub-clusters")
 
         # ── validate each sub-cluster before accepting the split ───────────────
         valid_subs = []

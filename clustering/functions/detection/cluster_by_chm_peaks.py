@@ -123,7 +123,8 @@ def cluster_by_chm_peaks(point_cloud, peak_coords, chm, transform, crown_radius=
           f"({100 * kept / len(points):.1f}% kept)")
 
     # ── step 6: build one PointCloud per label ────────────────────────────────
-    clusters = []
+    # out of use for now
+    """old_clusters = []
     for i in range(1, len(peak_coords) + 1):
         mask_i  = pt_labels == i
         n_pts   = mask_i.sum()
@@ -132,9 +133,28 @@ def cluster_by_chm_peaks(point_cloud, peak_coords, chm, transform, crown_radius=
             continue
 
         cluster = point_cloud.select_by_index(np.where(mask_i)[0])
-        clusters.append(cluster)
+        old_clusters.append(cluster)
+
+    print(f"Clusters from watershed: {len(old_clusters)} "
+          f"(of {len(peak_coords)} peaks, min_points={min_points})")"""
+
+
+    # ── step 6.5: build one PointCloud per label ────────────────────────────────
+    # sort point indices by label once, then slice per label
+    assigned   = np.flatnonzero(pt_labels > 0)          # drop label 0 up front
+    order      = assigned[np.argsort(pt_labels[assigned], kind="stable")]
+    sorted_lbl = pt_labels[order]
+
+    # boundaries of each label's run in the sorted array
+    uniq, starts, counts = np.unique(sorted_lbl, return_index=True, return_counts=True)
+
+    clusters = []
+    for lbl, start, n_pts in zip(uniq, starts, counts):
+        if n_pts < min_points:
+            continue
+        clusters.append(point_cloud.select_by_index(order[start:start + n_pts]))
 
     print(f"Clusters from watershed: {len(clusters)} "
-          f"(of {len(peak_coords)} peaks, min_points={min_points})")
+          f"(of {len(peak_coords)} peaks, min_points={min_points})") 
 
     return clusters
