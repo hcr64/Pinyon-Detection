@@ -1,0 +1,66 @@
+
+# ==== sweep started 2026-10-12 15:42:12 (SLURM array job 32556600) ====
+# ==== Notes: N/A ====
+
+
+# ==== sweep started 2026-10-12 15:43:02 (SLURM array job 32556602) ====
+# ==== Notes: Record more label matching result data ====
+
+max_radius,crown_radius,max_distance,min_points,min_peak_distance,k,min_density_ratio,min_height,search_radius_m,smooth_sigma,use_color,color_weight,min_exg,min_cluster_height,matching_score,n_gps,n_perfect,n_no_match,n_multi
+4.25,8.0,4.0,300,3.0,400,1.5,0.4,3.5,3.0,False,10.0,0.05,1.5,0.7629310344827587,232,177,47,8
+max_radius,crown_radius,max_distance,min_points,min_peak_distance,k,min_density_ratio,min_height,search_radius_m,smooth_sigma,use_color,color_weight,min_exg,min_cluster_height,matching_score,n_gps,n_perfect,n_no_match,n_multi
+4.25,8.0,4.0,300,3.0,400,1.5,0.75,2.5,3.0,False,10.0,0.05,1.5,0.8050847457627118,236,190,34,12
+max_radius,crown_radius,max_distance,min_points,min_peak_distance,k,min_density_ratio,min_height,search_radius_m,smooth_sigma,use_color,color_weight,min_exg,min_cluster_height,matching_score,n_gps,n_perfect,n_no_match,n_multi
+4.25,8.0,4.0,300,3.0,400,1.5,0.5,2.5,3.0,False,10.0,0.05,1.5,0.8135593220338984,236,192,32,12
+max_radius,crown_radius,max_distance,min_points,min_peak_distance,k,min_density_ratio,min_height,search_radius_m,smooth_sigma,use_color,color_weight,min_exg,min_cluster_height,matching_score,n_gps,n_perfect,n_no_match,n_multi
+4.25,8.0,4.0,300,3.0,400,1.5,0.3,2.5,3.0,False,10.0,0.05,1.5,0.8135593220338984,236,192,32,12
+max_radius,crown_radius,max_distance,min_points,min_peak_distance,k,min_density_ratio,min_height,search_radius_m,smooth_sigma,use_color,color_weight,min_exg,min_cluster_height,matching_score,n_gps,n_perfect,n_no_match,n_multi
+4.25,8.0,4.5,300,3.0,400,1.5,0.4,2.5,3.0,False,10.0,0.05,1.5,0.788135593220339,236,186,26,24
+max_radius,crown_radius,max_distance,min_points,min_peak_distance,k,min_density_ratio,min_height,search_radius_m,smooth_sigma,use_color,color_weight,min_exg,min_cluster_height,matching_score,n_gps,n_perfect,n_no_match,n_multi
+4.25,8.0,3.5,300,3.0,400,1.5,0.4,2.5,3.0,False,10.0,0.05,1.5,0.7923728813559322,236,187,42,7
+max_radius,crown_radius,max_distance,min_points,min_peak_distance,k,min_density_ratio,min_height,search_radius_m,smooth_sigma,use_color,color_weight,min_exg,min_cluster_height,matching_score,n_gps,n_perfect,n_no_match,n_multi
+4.25,8.0,4.0,200,2.5,400,1.5,0.4,2.5,3.0,False,10.0,0.05,1.5,0.809322033898305,236,191,31,14
+max_radius,crown_radius,max_distance,min_points,min_peak_distance,k,min_density_ratio,min_height,search_radius_m,smooth_sigma,use_color,color_weight,min_exg,min_cluster_height,matching_score,n_gps,n_perfect,n_no_match,n_multi
+4.25,8.0,4.0,200,3.0,400,1.5,0.4,2.5,3.0,False,15.0,0.05,1.5,0.8177966101694916,236,193,31,12
+max_radius,crown_radius,max_distance,min_points,min_peak_distance,k,min_density_ratio,min_height,search_radius_m,smooth_sigma,use_color,color_weight,min_exg,min_cluster_height,matching_score,n_gps,n_perfect,n_no_match,n_multi
+4.25,8.0,4.0,300,3.5,400,1.5,0.4,2.5,3.0,False,10.0,0.05,1.5,0.8177966101694916,236,193,32,11
+max_radius,crown_radius,max_distance,min_points,min_peak_distance,k,min_density_ratio,min_height,search_radius_m,smooth_sigma,use_color,color_weight,min_exg,min_cluster_height,matching_score,n_gps,n_perfect,n_no_match,n_multi
+4.25,8.0,4.0,300,3.0,400,1.5,0.4,2.5,2.0,False,10.0,0.05,1.5,0.8135593220338984,236,192,33,11
+max_radius,crown_radius,max_distance,min_points,min_peak_distance,k,min_density_ratio,min_height,search_radius_m,smooth_sigma,use_color,color_weight,min_exg,min_cluster_height,matching_score,n_gps,n_perfect,n_no_match,n_multi
+4.25,8.0,4.0,300,2.5,400,1.5,0.4,2.5,3.0,False,10.0,0.05,1.5,0.8050847457627118,236,190,32,14
+max_radius,crown_radius,max_distance,min_points,min_peak_distance,k,min_density_ratio,min_height,search_radius_m,smooth_sigma,use_color,color_weight,min_exg,min_cluster_height,matching_score,n_gps,n_perfect,n_no_match,n_multi
+4.25,8.0,4.0,300,3.0,400,1.5,0.4,2.5,2.5,False,10.0,0.05,1.5,0.8135593220338984,236,192,32,12
+max_radius,crown_radius,max_distance,min_points,min_peak_distance,k,min_density_ratio,min_height,search_radius_m,smooth_sigma,use_color,color_weight,min_exg,min_cluster_height,matching_score,n_gps,n_perfect,n_no_match,n_multi
+4.25,8.0,4.0,300,2.0,400,1.5,0.4,2.5,3.0,False,10.0,0.05,1.5,0.8008474576271186,236,189,32,15
+max_radius,crown_radius,max_distance,min_points,min_peak_distance,k,min_density_ratio,min_height,search_radius_m,smooth_sigma,use_color,color_weight,min_exg,min_cluster_height,matching_score,n_gps,n_perfect,n_no_match,n_multi
+4.25,8.0,4.0,300,3.0,400,1.5,0.4,2.5,4.0,False,10.0,0.05,1.5,0.809322033898305,236,191,32,13
+max_radius,crown_radius,max_distance,min_points,min_peak_distance,k,min_density_ratio,min_height,search_radius_m,smooth_sigma,use_color,color_weight,min_exg,min_cluster_height,matching_score,n_gps,n_perfect,n_no_match,n_multi
+4.25,8.0,4.0,300,3.0,400,1.5,0.4,3.0,3.0,False,10.0,0.05,1.5,0.7838983050847458,236,185,41,10
+max_radius,crown_radius,max_distance,min_points,min_peak_distance,k,min_density_ratio,min_height,search_radius_m,smooth_sigma,use_color,color_weight,min_exg,min_cluster_height,matching_score,n_gps,n_perfect,n_no_match,n_multi
+4.25,8.0,4.0,250,3.0,400,1.5,0.4,2.5,3.0,False,10.0,0.05,1.5,0.8177966101694916,236,193,31,12
+max_radius,crown_radius,max_distance,min_points,min_peak_distance,k,min_density_ratio,min_height,search_radius_m,smooth_sigma,use_color,color_weight,min_exg,min_cluster_height,matching_score,n_gps,n_perfect,n_no_match,n_multi
+4.25,8.0,4.0,300,3.0,400,1.5,0.4,2.0,3.0,False,10.0,0.05,1.5,0.7754237288135594,236,183,27,26
+max_radius,crown_radius,max_distance,min_points,min_peak_distance,k,min_density_ratio,min_height,search_radius_m,smooth_sigma,use_color,color_weight,min_exg,min_cluster_height,matching_score,n_gps,n_perfect,n_no_match,n_multi
+4.25,8.0,4.0,300,4.0,400,1.5,0.4,2.5,3.0,False,10.0,0.05,1.5,0.8135593220338984,236,192,33,11
+max_radius,crown_radius,max_distance,min_points,min_peak_distance,k,min_density_ratio,min_height,search_radius_m,smooth_sigma,use_color,color_weight,min_exg,min_cluster_height,matching_score,n_gps,n_perfect,n_no_match,n_multi
+4.25,8.0,4.0,300,3.0,400,1.5,0.4,2.5,3.0,False,10.0,0.05,1.5,0.8135593220338984,236,192,32,12
+max_radius,crown_radius,max_distance,min_points,min_peak_distance,k,min_density_ratio,min_height,search_radius_m,smooth_sigma,use_color,color_weight,min_exg,min_cluster_height,matching_score,n_gps,n_perfect,n_no_match,n_multi
+4.25,8.0,4.0,200,3.0,400,1.5,0.4,2.5,3.0,False,10.0,0.05,1.5,0.8177966101694916,236,193,31,12
+max_radius,crown_radius,max_distance,min_points,min_peak_distance,k,min_density_ratio,min_height,search_radius_m,smooth_sigma,use_color,color_weight,min_exg,min_cluster_height,matching_score,n_gps,n_perfect,n_no_match,n_multi
+4.25,8.0,4.0,300,3.0,400,1.5,0.4,2.5,3.5,False,10.0,0.05,1.5,0.809322033898305,236,191,32,13
+max_radius,crown_radius,max_distance,min_points,min_peak_distance,k,min_density_ratio,min_height,search_radius_m,smooth_sigma,use_color,color_weight,min_exg,min_cluster_height,matching_score,n_gps,n_perfect,n_no_match,n_multi
+4.25,8.0,4.0,150,3.0,400,1.5,0.4,2.5,3.0,False,10.0,0.05,1.5,0.8220338983050848,236,194,30,12
+max_radius,crown_radius,max_distance,min_points,min_peak_distance,k,min_density_ratio,min_height,search_radius_m,smooth_sigma,use_color,color_weight,min_exg,min_cluster_height,matching_score,n_gps,n_perfect,n_no_match,n_multi
+4.25,8.0,4.0,100,3.0,400,1.5,0.4,2.5,3.0,False,10.0,0.05,1.5,0.8177966101694916,236,193,30,13
+
+# ==== sweep started 2026-10-12 20:13:52 (SLURM array job 32558090) ====
+# ==== Notes: N/A ====
+
+
+# ==== sweep started 2026-10-12 20:16:55 (SLURM array job 32558118) ====
+# ==== Notes: N/A ====
+
+
+# ==== sweep started 2026-10-12 23:21:53 (SLURM array job 32560319) ====
+# ==== Notes: N/A ====
+

@@ -43,7 +43,7 @@ for dir in "${LOG_DIRS[@]}"; do
                 echo "Would delete: $f  (job_id=$job_id)"
             else
                 # echo "Deleting: $f  (job_id=$job_id)"
-                rm -f "$f"
+                mv "$f" /scratch/hcr64/
             fi
         fi
     done

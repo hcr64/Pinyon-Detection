@@ -30,6 +30,7 @@ import open3d as o3d
 import os
 import argparse
 import csv
+import time
 
 from scipy.spatial import KDTree
 
@@ -53,26 +54,68 @@ def str2bool(v):
         return False
     raise argparse.ArgumentTypeError(f"Expected a boolean value, got '{v}'")
 
+def append_result_row(path, row, preamble=None, lock_timeout=60):
+    """Append one row to a per-sweep CSV. The first writer creates the file with
+    the preamble (# comment lines) and the header. Uses an atomic mkdir lock
+    instead of flock, which isn't reliable on some cluster filesystems."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    lock_dir = path + ".lock"
+
+    start = time.time()
+    while True:
+        try:
+            os.mkdir(lock_dir)
+            break
+        except FileExistsError:
+            if time.time() - start > lock_timeout:
+                raise TimeoutError(f"Could not get {lock_dir} in {lock_timeout}s. "
+                                   f"If no task is writing, delete it and rerun.")
+            time.sleep(0.2)
+
+    try:
+        new_file = not os.path.exists(path) or os.path.getsize(path) == 0
+        with open(path, "a", newline="") as f:
+            if new_file and preamble:
+                f.write("\n".join(preamble) + "\n")
+            writer = csv.DictWriter(f, fieldnames=row.keys())
+            if new_file:
+                writer.writeheader()
+            writer.writerow(row)
+    finally:
+        os.rmdir(lock_dir)
 
 def main():
 
     # ── CLI args ──────────────────────────────────────────────────────────
     parser = argparse.ArgumentParser()
-    parser.add_argument("--eps",               type=float, required=True)
-    parser.add_argument("--green_threshold",   type=float, required=True)
+
+    # dead / no effect on matching_score — kept optional so pinyons.sh still works
+    parser.add_argument("--eps",             type=float, default=2.0)
+    parser.add_argument("--green_threshold", type=float, default=0.025)
+    parser.add_argument("--voxel_size",      type=float, default=0.08)
+    parser.add_argument("--gps_sigma",       type=float, default=4.0)
+
+    # live args that were previously hardcoded
+    parser.add_argument("--crown_radius",       type=float, default=8.0)
+    parser.add_argument("--min_density_ratio",  type=float, default=1.5)
+    parser.add_argument("--use_color",          type=str2bool, default=True)
+    parser.add_argument("--color_weight",       type=float, default=10.0)
+    parser.add_argument("--min_exg",            type=float, default=0.05)
+    parser.add_argument("--min_cluster_height", type=float, default=1.5)
+
     parser.add_argument("--max_radius",        type=float, required=True)
     parser.add_argument("--max_distance",      type=float, required=True)
     parser.add_argument("--min_points",        type=int,   required=True)
-    parser.add_argument("--voxel_size",        type=float, required=True)
     parser.add_argument("--min_peak_distance", type=float, required=True)
     parser.add_argument("--k",                 type=int,   required=True)
     parser.add_argument("--min_height",        type=float, required=True)
     parser.add_argument("--search_radius_m",   type=float, required=True)
-    parser.add_argument("--gps_sigma",         type=float, required=True)
     parser.add_argument("--smooth_sigma",      type=float, required=True)
 
+    # Technical vars, not related to proj
     parser.add_argument("--trial_name", type=str, required=True)
     parser.add_argument("--job_id",     type=str, required=True)
+    parser.add_argument("--notes", type=str, default="N/A")
 
     # gates ALL disk writes of clusters/dataframes/pcds/CHM/pre-split diagnostics.
     # Default True so single runs (pinyons.sh) behave exactly as before.
@@ -92,16 +135,29 @@ def main():
     MIN_PEAK_DISTANCE = args.min_peak_distance
     K                 = args.k
 
-    MIN_DENSITY_RATIO = 1.5
-    CROWN_RADIUS=8
+    CROWN_RADIUS       = args.crown_radius
+    MIN_DENSITY_RATIO  = args.min_density_ratio
+    USE_COLOR          = args.use_color
+    COLOR_WEIGHT       = args.color_weight
+    MIN_EXG            = args.min_exg
+    MIN_POINT_HEIGHT   = args.min_cluster_height
 
     MIN_HEIGHT      = args.min_height
     SEARCH_RADIUS_M = args.search_radius_m
     GPS_SIGMA       = args.gps_sigma
     SMOOTH_SIGMA    = args.smooth_sigma
 
+    # technical vars that have no effect on data processing
     TRIAL_NAME = args.trial_name
     JOB_ID     = args.job_id
+    NOTES = args.notes
+
+    # one file per sweep: SLURM_ARRAY_JOB_ID is shared by every task in the array.
+    # Falls back to JOB_ID for single runs (pinyons.sh), where it isn't set.
+    SWEEP_ID = os.environ.get("SLURM_ARRAY_JOB_ID", JOB_ID)
+    TASK_ID  = os.environ.get("SLURM_ARRAY_TASK_ID", "")
+
+    # if the processed data should be saved or not
     SAVE       = args.save
 
     PATHS = get_paths(TRIAL_NAME)
@@ -109,7 +165,7 @@ def main():
     print()
     print()
     print("#### SETTINGS ####")
-    print("EPS:", EPS)
+    print("USE_COLOR:", USE_COLOR)
     print("MIN_POINTS:", MIN_POINTS)
     print("GREEN_THRESHOLD:", GREEN_THRESHOLD)
     print("MAX_DISTANCE:", MAX_DISTANCE)
@@ -233,8 +289,9 @@ def main():
         )
         print("Point cloud clustered.\n")
 
-        # save new clusters to the raw clusters path
-        save_clusters(clusters, PATHS['Raw_Clusters'])
+        if SAVE:
+            # save new clusters to the raw clusters path
+            save_clusters(clusters, PATHS['Raw_Clusters'])
 
     # load in the raw clusters from disk
     else:
@@ -247,50 +304,56 @@ def main():
             return 1
         print()
 
+    stages = {"raw": clusters} 
+
     # filter clusters by height
-    MIN_POINT_HEIGHT = 1.5
     clusters = [
         c for c in clusters
         if np.asarray(c.points)[:, 2].max() - np.asarray(c.points)[:, 2].min() > MIN_POINT_HEIGHT
     ]
+    stages["height>1.5"] = clusters
 
     # filter clusters by how green their most green points are, my custom function
     clusters = filter_clusters_by_green_crown(
-        clusters,
-        top_fraction=0.20,
-        min_exg=0.05,
-    )
+        clusters, 
+        top_fraction=0.20, 
+        min_exg=MIN_EXG
+        )
+    stages["green_crown"] = clusters
+
 
     # strip ground from the clusters, make sure it is just tree
     print("Stripping ground from clusters...")
     clusters = strip_ground_from_clusters(clusters, ground_percentile=10, min_height_above_ground=0.5)
     print("Ground stripped.\n")
+    stages["ground_strip"] = clusters
+
 
     # splits clusters that are likely multiple trees
     # uses point density cores to find multiple clusters within one
     print("Splitting clusters...")
     clusters = split_large_clusters(
         clusters,
-        min_points=MIN_POINTS,
+        min_points=MIN_POINTS, 
         max_radius=MAX_RADIUS,
-        min_peak_distance=MIN_PEAK_DISTANCE,
+        min_peak_distance=MIN_PEAK_DISTANCE, 
         k=K,
         min_density_ratio=MIN_DENSITY_RATIO,
-        use_color=True,
-        # split_large_clusters() calls save_clusters_descriptive() internally
-        # whenever save_pre_split_path is not None — pass None during sweeps
-        # to skip that write entirely rather than gating it after the fact
+        use_color=USE_COLOR, 
+        color_weight=COLOR_WEIGHT,
         save_pre_split_path=PATHS['PS_clusters'] if SAVE else None,
         silent=SILENT
     )
     print("Clusters split.\n")
+    stages["split"] = clusters
 
     # filter out clusters by height and radius, make sure they are all likely trees
     print("Filtering clusters...")
     before = len(clusters)
     clusters = [c for c in clusters if filter_cluster(c, min_height=1.0, min_radius=0.3)]
     print(f"Filtered {before - len(clusters)} non-tree clusters, {len(clusters)} remaining\n")
-
+    stages["final"] = clusters                       # must be last
+    
     # make dataframes, these are less complex that can also be sued for graphing
     print("Making cluster df...")
     df_clusters = clusters_to_dataframe(clusters, k=K)
@@ -315,7 +378,7 @@ def main():
 
     # ── GPS label matching ────────────────────────────────────────────────
     print("Assigning labels to clusters...")
-    df_clusters, score = match_labels_to_clusters(
+    df_clusters, score, match_counts = match_labels_to_clusters(
         PATHS['Labels'],
         df_clusters,
         csv_path_2=os.path.dirname(PATHS['Labels']) + '/sunsetCraterMay26.csv',
@@ -328,6 +391,9 @@ def main():
         # GPS label — skip during sweeps the same way as the other writes
         multi_match_save_path=PATHS["MM_save_path"] if SAVE else None,
         graph_subtitle=f"EPS:{EPS}-MR:{MAX_RADIUS}-GT:{GREEN_THRESHOLD}-MPts:{MIN_POINTS}-MD:{MAX_DISTANCE}-K:{K}-MPD:{MIN_PEAK_DISTANCE}-GPSs:{GPS_SIGMA}-SMs:{SMOOTH_SIGMA}",
+        stage_clusters=stages if SAVE else None,
+        diagnostic_save_path=PATHS['Dataframes'] + 'gps_loss_diagnosis.csv' if SAVE else None,
+        centroid_k=K,
         silent=SILENT
     )
     print("Labels assigned.\n")
@@ -355,34 +421,36 @@ def main():
     # appends one cheap row to the results CSV so every run's score gets
     # a permanent record, not only sweep runs.
     results = {
-        "eps":               EPS,
-        "green_threshold":   GREEN_THRESHOLD,
-        "max_radius":        MAX_RADIUS,
-        "max_distance":      MAX_DISTANCE,
-        "min_points":        MIN_POINTS,
-        "voxel_size":        VOXEL_SIZE,
-        "min_peak_distance": MIN_PEAK_DISTANCE,
-        "k":                 K,
-        "min_height":        MIN_HEIGHT,
-        "search_radius_m":   SEARCH_RADIUS_M,
-        "gps_sigma":         GPS_SIGMA,
-        "smooth_sigma":      SMOOTH_SIGMA,
+        "task":              TASK_ID,
+        "max_radius":         MAX_RADIUS,
+        "crown_radius":       CROWN_RADIUS,
+        "max_distance":       MAX_DISTANCE,
+        "min_points":         MIN_POINTS,
+        "min_peak_distance":  MIN_PEAK_DISTANCE,
+        "k":                  K,
+        "min_density_ratio":  MIN_DENSITY_RATIO,
+        "min_height":         MIN_HEIGHT,
+        "search_radius_m":    SEARCH_RADIUS_M,
+        "smooth_sigma":       SMOOTH_SIGMA,
+        "use_color":          USE_COLOR,
+        "color_weight":       COLOR_WEIGHT,
+        "min_exg":            MIN_EXG,
+        "min_cluster_height": MIN_POINT_HEIGHT,
         "matching_score":    score,
-    }
+        **match_counts,    
+        }
 
-    # save the results to the results path
-    results_path = PATHS['GPS_results']
-    os.makedirs(os.path.dirname(results_path), exist_ok=True)
-    file_exists = os.path.exists(results_path)
-
-    with open(results_path, "a", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=results.keys())
-        if not file_exists:
-            writer.writeheader()
-        writer.writerow(results)
-
+    # save results to results path
+    results_path = os.path.join(os.path.dirname(PATHS['GPS_results']),
+                                f"sweep_{SWEEP_ID}.csv")
+    preamble = [
+        f"# Sweep {SWEEP_ID} started {datetime.now():%Y-%m-%d %H:%M:%S}",
+        f"# Notes: {NOTES}",
+    ]
+    append_result_row(results_path, results, preamble=preamble)
     print(f"Results saved to {results_path}")
 
+    # print ending message
     print("Clustering + labeling complete.")
     print("Time at Completion: " + datetime.now().strftime("%H:%M:%S"))
 

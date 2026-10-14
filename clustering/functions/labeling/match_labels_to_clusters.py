@@ -15,6 +15,9 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
                               multi_match_save_path=None,
                               clusters=None,
                               csv_path_2=None,
+                              stage_clusters=None,
+                              diagnostic_save_path=None,
+                              centroid_k=50,
                               silent=True):
     """
     Match GPS species labels to detected clusters via optimal one-to-one assignment,
@@ -152,6 +155,12 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
     df_labels  = df_labels[in_coverage].reset_index(drop=True)
     csv_coords = csv_coords[in_coverage]
 
+    if stage_clusters is not None:
+        from functions.labeling.diagnose_gps_losses import diagnose_gps_losses
+        diagnose_gps_losses(csv_coords, df_labels, stage_clusters,
+                            max_distance, k=centroid_k,
+                            save_path=diagnostic_save_path)
+
     # ── diagnostic overlap plot ───────────────────────────────────────────────
 
     plot_gps_cluster_overlap(csv_coords,
@@ -163,7 +172,7 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
 
     # ── matching score ────────────────────────────────────────────────────────
 
-    score = calculate_matching_score(
+    score, match_counts = calculate_matching_score(
         csv_coords,
         cluster_coords,
         max_distance=max_distance
@@ -253,8 +262,7 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
     print(f"Assignments accepted (≤ {max_distance}m): {n_assigned}")
     print(f"Assignments rejected (> {max_distance}m): {n_rejected}")
 
-    return df_clusters, score
-
+    return df_clusters, score, match_counts
 
 # ── scoring ───────────────────────────────────────────────────────────────────
 
@@ -299,7 +307,7 @@ def calculate_matching_score(csv_coords, cluster_coords, max_distance=5.0):
         else:
             multi_match += 1
 
-    score = perfect / n_gps
+        score = perfect / n_gps
 
     print(f"GPS points:              {n_gps}")
     print(f"Perfect matches (1:1):   {perfect}  ({100*perfect/n_gps:.1f}%)")
@@ -307,8 +315,14 @@ def calculate_matching_score(csv_coords, cluster_coords, max_distance=5.0):
     print(f"Multiple clusters:       {multi_match}  ({100*multi_match/n_gps:.1f}%)")
     print(f"Matching score:          {score:.3f}")
 
-    return score
+    counts = {
+        "n_gps":      n_gps,
+        "n_perfect":  perfect,
+        "n_no_match": no_match,
+        "n_multi":    multi_match,
+    }
 
+    return score, counts
 
 # ── overlap diagnostic plot ───────────────────────────────────────────────────
 

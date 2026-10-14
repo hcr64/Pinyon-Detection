@@ -22,7 +22,7 @@ The project is split into two independent stages:
 - **`clustering/`** — everything expensive: point cloud processing, CHM,
   watershed segmentation, GPS label matching. Run via `run_clustering.py`,
   usually swept over many parameter combinations to optimize the matching
-  score. Depending on parameters, can take anywhere from 25 minutes to an hour. 
+  score. Depending on parameters, usually takes around 25 to 50 minutes (Not counting reading in .las files).
   See [`clustering/README.md`](clustering/README.md).
 
 - **`modelling/`** — species classification on the labeled clusters, and drought tolerance on pinyons.
@@ -31,6 +31,10 @@ The project is split into two independent stages:
   Takes a lot less time to run, usually less than 5 minutes. See [`modelling/README.md`](modelling/README.md).
 
 These used to be one script (`main.py`). They were split apart because clustering was taking too long and was not required for training the model. The main file became too cluttered, and was clearly two seperate parts. 
+
+---
+## AI Usage Disclaimer
+All python and bash coding has been done by Anthropic's Claude Sonnet models (versions 4.x and 5.x). Some slight touch ups have been done by myself on code outputted from claude. The web browser version has been used, and outputs are copied into NAU's Monsoon's VSCode IDE.
 
 ---
 

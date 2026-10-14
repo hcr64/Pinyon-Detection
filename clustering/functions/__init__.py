@@ -2,7 +2,9 @@
 from .io.las_folder_to_pointcloud import las_folder_to_pointcloud
 # from .io.save_clusters import save_clusters, load_clusters
 from .io.save_labeled_clusters import save_labeled_clusters
-from .io.save_clusters_descriptive import save_clusters_descriptive
+
+# moved to legacy
+# from .io.save_clusters_descriptive import save_clusters_descriptive
 
 # preprocessing
 # from .preprocessing.clean_up_pointcloud import clean_up_pointcloud
@@ -19,3 +21,4 @@ from .detection.filter_green_crown import filter_clusters_by_green_crown
 # labeling
 from .labeling.match_labels_to_clusters import match_labels_to_clusters
 from .labeling.save_multimatch_clusters import save_multimatch_clusters
+from .labeling.diagnose_gps_losses import diagnose_gps_losses
