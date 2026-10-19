@@ -27,6 +27,14 @@ SEARCH_RADIUS_M=2.5
 GPS_SIGMA=4.0
 SMOOTH_SIGMA=3
 
+# get a user inputted message after the -m command
+while getopts "m:" opt; do
+  case ${opt} in
+    m ) MESSAGE="$OPTARG" ;;
+    \? ) echo "Usage: $0 -m \"your message\"" >&2; exit 1 ;;
+  esac
+done
+
 # clear out the image & log folders before it start
 # find trial_data/$TRIAL_NAME/logs/* -mmin +15 -type f -delete
 # find trial_data/$TRIAL_NAME/images/* -mmin +15 -type f -delete
@@ -41,6 +49,17 @@ SAVE=True
 
 # notes for reference in the output file
 NOTES="GPS Loss Diagnostics"
+
+# the path to save results to
+RESULTS_PATH="trial_data/$TRIAL_NAME/GPS_results/job_${SLURM_JOB_ID}.csv"
+
+# print header message
+mkdir -p "$(dirname "$RESULTS_PATH")"
+{
+    echo "# ==== sweep started $(date '+%Y-%m-%d %H:%M:%S') (SLURM array job ${SLURM_JOB_ID}) ===="
+    echo "# ==== Notes: ${MESSAGE} ===="
+    echo
+} >> "$RESULTS_PATH"
 
 # clustering + GPS labeling only. Run train_model.sh (or `python
 # train_model.py --trial_name $TRIAL_NAME`) separately once this finishes.
@@ -59,5 +78,6 @@ python -u clustering/run_clustering.py \
     --smooth_sigma      $SMOOTH_SIGMA \
     --job_id            $SLURM_JOB_ID \
     --notes             "$NOTES" \
+    --results_path      $RESULTS_PATH \
     --save              $SAVE \
     --trial_name        $TRIAL_NAME

@@ -3,7 +3,7 @@
 #SBATCH --output=clustering/logs/sweep_%A_%a.out
 #SBATCH --error=clustering/logs/sweep_%A_%a.err
 #SBATCH --chdir=/home/hcr64/Pinyon-Detection/
-#SBATCH --array=1-23
+#SBATCH --array=1-3
 #SBATCH --time=01:00:00
 #SBATCH --mem=48G
 #SBATCH --partition=core
@@ -32,11 +32,10 @@ bash shells/clear_garbage_files.sh
 
 # MUST match PATHS['GPS_results'] in constants.py. New file because the
 # column set changed — the old results_Jul18.csv header no longer matches.
-RESULTS_PATH=trial_data/$TRIAL_NAME/results/
+RESULTS_PATH="trial_data/$TRIAL_NAME/GPS_results/sweep_${SLURM_ARRAY_JOB_ID}.csv"
 if [ "${SLURM_ARRAY_TASK_ID}" == "${SLURM_ARRAY_TASK_MIN}" ]; then
     mkdir -p "$(dirname "$RESULTS_PATH")"
     {
-        echo ""
         echo "# ==== sweep started $(date '+%Y-%m-%d %H:%M:%S') (SLURM array job ${SLURM_ARRAY_JOB_ID}) ===="
         echo "# ==== Notes: ${MESSAGE} ===="
         echo
@@ -91,5 +90,6 @@ python -u clustering/run_clustering.py \
     --min_cluster_height $MIN_CLUSTER_HEIGHT \
     --job_id             $SLURM_JOB_ID \
     --notes              "$MESSAGE" \
+    --results_path       $RESULTS_PATH \
     --save               $SAVE \
     --trial_name         $TRIAL_NAME

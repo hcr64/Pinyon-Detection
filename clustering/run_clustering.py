@@ -43,7 +43,6 @@ from global_files import *
 
 print("Successfully loaded all packages.")
 
-
 def str2bool(v):
     """argparse helper — accepts True/False, true/false, 1/0 etc."""
     if isinstance(v, bool):
@@ -84,106 +83,85 @@ def append_result_row(path, row, preamble=None, lock_timeout=60):
     finally:
         os.rmdir(lock_dir)
 
-def main():
+REQUIRED = object()   # sentinel: no default, flag must be passed
 
-    # ── CLI args ──────────────────────────────────────────────────────────
+# name: (type, default). Order here == order of columns in the results CSV.
+PARAMS = {
+    # swept / required
+    "max_radius":        (float, REQUIRED),
+    "max_distance":      (float, REQUIRED),
+    "min_points":        (int,   REQUIRED),
+    "min_peak_distance": (float, REQUIRED),
+    "k":                 (int,   REQUIRED),
+    "min_height":        (float, REQUIRED),
+    "search_radius_m":   (float, REQUIRED),
+    "smooth_sigma":      (float, REQUIRED),
+
+    # dead / no effect on matching_score, optional so pinyons.sh still works
+    "eps":               (float, 2.0),
+    "green_threshold":   (float, 0.025),
+    "voxel_size":        (float, 0.08),
+    "gps_sigma":         (float, 4.0),
+
+    # live args that used to be hardcoded
+    "crown_radius":       (float,    8.0),
+    "min_density_ratio":  (float,    1.5),
+    "use_color":          (str2bool, True),
+    "color_weight":       (float,    10.0),
+    "min_exg":            (float,    0.05),
+    "min_cluster_height": (float,    1.5),
+}
+
+# not CLI args, not swept
+FIXED = {"mask_chm_filled": 0.3}
+
+# columns written to the results CSV, in order (dead params left out on purpose)
+RESULT_KEYS = [
+    "max_radius", "crown_radius", "max_distance", "min_points",
+    "min_peak_distance", "k", "min_density_ratio", "min_height",
+    "search_radius_m", "smooth_sigma", "use_color", "color_weight",
+    "min_exg", "min_cluster_height",
+]
+
+def main():
+    # get the arg parser
     parser = argparse.ArgumentParser()
 
-    # dead / no effect on matching_score — kept optional so pinyons.sh still works
-    parser.add_argument("--eps",             type=float, default=2.0)
-    parser.add_argument("--green_threshold", type=float, default=0.025)
-    parser.add_argument("--voxel_size",      type=float, default=0.08)
-    parser.add_argument("--gps_sigma",       type=float, default=4.0)
+    # get sweepable params
+    for name, (typ, default) in PARAMS.items():
+        if default is REQUIRED:
+            parser.add_argument(f"--{name}", type=typ, required=True)
+        else:
+            parser.add_argument(f"--{name}", type=typ, default=default)
 
-    # live args that were previously hardcoded
-    parser.add_argument("--crown_radius",       type=float, default=8.0)
-    parser.add_argument("--min_density_ratio",  type=float, default=1.5)
-    parser.add_argument("--use_color",          type=str2bool, default=True)
-    parser.add_argument("--color_weight",       type=float, default=10.0)
-    parser.add_argument("--min_exg",            type=float, default=0.05)
-    parser.add_argument("--min_cluster_height", type=float, default=1.5)
-
-    parser.add_argument("--max_radius",        type=float, required=True)
-    parser.add_argument("--max_distance",      type=float, required=True)
-    parser.add_argument("--min_points",        type=int,   required=True)
-    parser.add_argument("--min_peak_distance", type=float, required=True)
-    parser.add_argument("--k",                 type=int,   required=True)
-    parser.add_argument("--min_height",        type=float, required=True)
-    parser.add_argument("--search_radius_m",   type=float, required=True)
-    parser.add_argument("--smooth_sigma",      type=float, required=True)
-
-    # Technical vars, not related to proj
+    # technical vars, not part of the param dict
     parser.add_argument("--trial_name", type=str, required=True)
     parser.add_argument("--job_id",     type=str, required=True)
-    parser.add_argument("--notes", type=str, default="N/A")
-
-    # gates ALL disk writes of clusters/dataframes/pcds/CHM/pre-split diagnostics.
-    # Default True so single runs (pinyons.sh) behave exactly as before.
-    # Sweep jobs (pinyon_sweep.sh) should pass --save False — matching_score
-    # still gets appended to GPS_results regardless, since that's the whole
-    # point of a sweep; this only silences the heavy artifact writes.
-    parser.add_argument("--save", type=str2bool, default=True)
-
+    parser.add_argument("--notes",      type=str, default="N/A")
+    parser.add_argument("--results_path", type=str, default="N/A")
+    parser.add_argument("--save",       type=str2bool, default=True)
     args = parser.parse_args()
 
-    EPS               = args.eps
-    GREEN_THRESHOLD   = args.green_threshold
-    MAX_RADIUS        = args.max_radius
-    MAX_DISTANCE      = args.max_distance
-    MIN_POINTS        = args.min_points
-    VOXEL_SIZE        = args.voxel_size
-    MIN_PEAK_DISTANCE = args.min_peak_distance
-    K                 = args.k
+    # make the param dict
+    P = {name: getattr(args, name) for name in PARAMS}
+    P.update(FIXED)
 
-    CROWN_RADIUS       = args.crown_radius
-    MIN_DENSITY_RATIO  = args.min_density_ratio
-    USE_COLOR          = args.use_color
-    COLOR_WEIGHT       = args.color_weight
-    MIN_EXG            = args.min_exg
-    MIN_POINT_HEIGHT   = args.min_cluster_height
+    # technical vars
+    TRIAL_NAME, JOB_ID, NOTES, RESULTS_PATH, SAVE = args.trial_name, args.job_id, args.notes, args.results_path, args.save
 
-    MIN_HEIGHT      = args.min_height
-    SEARCH_RADIUS_M = args.search_radius_m
-    GPS_SIGMA       = args.gps_sigma
-    SMOOTH_SIGMA    = args.smooth_sigma
-
-    # technical vars that have no effect on data processing
-    TRIAL_NAME = args.trial_name
-    JOB_ID     = args.job_id
-    NOTES = args.notes
-
-    # one file per sweep: SLURM_ARRAY_JOB_ID is shared by every task in the array.
-    # Falls back to JOB_ID for single runs (pinyons.sh), where it isn't set.
-    SWEEP_ID = os.environ.get("SLURM_ARRAY_JOB_ID", JOB_ID)
-    TASK_ID  = os.environ.get("SLURM_ARRAY_TASK_ID", "")
-
-    # if the processed data should be saved or not
-    SAVE       = args.save
-
-    PATHS = get_paths(TRIAL_NAME)
-
-    print()
-    print()
-    print("#### SETTINGS ####")
-    print("USE_COLOR:", USE_COLOR)
-    print("MIN_POINTS:", MIN_POINTS)
-    print("GREEN_THRESHOLD:", GREEN_THRESHOLD)
-    print("MAX_DISTANCE:", MAX_DISTANCE)
-    print("MAX_RADIUS:", MAX_RADIUS)
-    print("VOXEL_SIZE:", VOXEL_SIZE)
-    print("MIN_PEAK_DISTANCE:", MIN_PEAK_DISTANCE)
-    print("K:", K)
-    print("MIN_DENSITY_RATIO:", MIN_DENSITY_RATIO)
-    print("GPS_SIGMA:", GPS_SIGMA)
-    print("SMOOTH_SIGMA:", SMOOTH_SIGMA)
+    # print the settings
+    print("\n\n#### SETTINGS ####")
+    for name, val in P.items():
+        print(f"{name.upper()}: {val}")
     print("SAVE:", SAVE)
-
-
     print("TRIAL_NAME:", TRIAL_NAME)
     print("JOB_ID:", JOB_ID)
     print("Program Start Time: " + datetime.now().strftime("%H:%M:%S"))
-    print()
-    print()
+    print("\n")
+
+    SWEEP_ID = os.environ.get("SLURM_ARRAY_JOB_ID", JOB_ID)
+    TASK_ID  = os.environ.get("SLURM_ARRAY_TASK_ID", "")
+    PATHS = get_paths(TRIAL_NAME)
 
     # if  want to downsize the raw pointcloud or not
     # this variable is on the chopping block, it is usually set to true
@@ -199,7 +177,7 @@ def main():
             PATHS['Data'],
             silent=SILENT,
             downsize_pcd=DOWNSIZE,
-            v_size=VOXEL_SIZE)
+            v_size=P['voxel_size'])
         print('Point cloud successfully loaded.\n')
 
         if SAVE:
@@ -227,7 +205,7 @@ def main():
     if STEPS['Make_CHM'] and STEPS['Make_Raw_Clusters']:
         # downsize the pointcloud, can take a while
         print("Downsizing pointcloud...")
-        point_cloud = point_cloud.voxel_down_sample(voxel_size=VOXEL_SIZE)
+        point_cloud = point_cloud.voxel_down_sample(voxel_size=P['voxel_size'])
         print("Done downsizing.\n")
 
         # make the chm
@@ -258,8 +236,6 @@ def main():
     print(f"CHM resolution: {CHM_RESOLUTION} m/px")
 
 
-
-
     ### With evertyhting loaded in, the clustering begins
     ### Very time consuming, can take up to an hour or longer in some cases
 
@@ -270,10 +246,10 @@ def main():
         peak_coords, peak_heights = find_chm_peaks(
             chm,
             transform,
-            min_height=MIN_HEIGHT,
-            search_radius_m=SEARCH_RADIUS_M,
+            min_height=P['min_height'],
+            search_radius_m=P['search_radius_m'],
             resolution=CHM_RESOLUTION,
-            smooth_sigma=SMOOTH_SIGMA)
+            smooth_sigma=P['smooth_sigma'])
         print()
 
 
@@ -284,8 +260,9 @@ def main():
             peak_coords,
             chm=chm,
             transform=transform,
-            crown_radius=CROWN_RADIUS,
-            min_points=MIN_POINTS
+            crown_radius=P['crown_radius'],
+            min_points=P['min_points'],
+            mask_chm_filled=P['mask_chm_filled'],
         )
         print("Point cloud clustered.\n")
 
@@ -309,7 +286,7 @@ def main():
     # filter clusters by height
     clusters = [
         c for c in clusters
-        if np.asarray(c.points)[:, 2].max() - np.asarray(c.points)[:, 2].min() > MIN_POINT_HEIGHT
+        if np.asarray(c.points)[:, 2].max() - np.asarray(c.points)[:, 2].min() > P['min_cluster_height']
     ]
     stages["height>1.5"] = clusters
 
@@ -317,7 +294,7 @@ def main():
     clusters = filter_clusters_by_green_crown(
         clusters, 
         top_fraction=0.20, 
-        min_exg=MIN_EXG
+        min_exg=P['min_exg']
         )
     stages["green_crown"] = clusters
 
@@ -334,13 +311,13 @@ def main():
     print("Splitting clusters...")
     clusters = split_large_clusters(
         clusters,
-        min_points=MIN_POINTS, 
-        max_radius=MAX_RADIUS,
-        min_peak_distance=MIN_PEAK_DISTANCE, 
-        k=K,
-        min_density_ratio=MIN_DENSITY_RATIO,
-        use_color=USE_COLOR, 
-        color_weight=COLOR_WEIGHT,
+        min_points=P['min_points'], 
+        max_radius=P['max_radius'],
+        min_peak_distance=P['min_peak_distance'], 
+        k=P['k'],
+        min_density_ratio=P['min_density_ratio'],
+        use_color=P['use_color'], 
+        color_weight=P['color_weight'],
         save_pre_split_path=PATHS['PS_clusters'] if SAVE else None,
         silent=SILENT
     )
@@ -356,7 +333,7 @@ def main():
     
     # make dataframes, these are less complex that can also be sued for graphing
     print("Making cluster df...")
-    df_clusters = clusters_to_dataframe(clusters, k=K)
+    df_clusters = clusters_to_dataframe(clusters, k=P['k'])
     print("Cluster df made.\n")
 
     # get a deeper feature df specifically for model training
@@ -382,18 +359,18 @@ def main():
         PATHS['Labels'],
         df_clusters,
         csv_path_2=os.path.dirname(PATHS['Labels']) + '/sunsetCraterMay26.csv',
-        max_distance=MAX_DISTANCE,
+        max_distance=P['max_distance'],
         graph_save_path=PATHS['Images'],
-        gps_sigma=GPS_SIGMA,
+        gps_sigma=P['gps_sigma'],
         job_id=JOB_ID,
         clusters=clusters,
         # save_multimatch_clusters() writes one .ply folder per ambiguous
         # GPS label — skip during sweeps the same way as the other writes
         multi_match_save_path=PATHS["MM_save_path"] if SAVE else None,
-        graph_subtitle=f"EPS:{EPS}-MR:{MAX_RADIUS}-GT:{GREEN_THRESHOLD}-MPts:{MIN_POINTS}-MD:{MAX_DISTANCE}-K:{K}-MPD:{MIN_PEAK_DISTANCE}-GPSs:{GPS_SIGMA}-SMs:{SMOOTH_SIGMA}",
-        stage_clusters=stages if SAVE else None,
+        graph_subtitle=f"{P}",
+        stage_clusters=None, #stages if SAVE else None,
         diagnostic_save_path=PATHS['Dataframes'] + 'gps_loss_diagnosis.csv' if SAVE else None,
-        centroid_k=K,
+        centroid_k=P['k'],
         silent=SILENT
     )
     print("Labels assigned.\n")
@@ -421,24 +398,11 @@ def main():
     # appends one cheap row to the results CSV so every run's score gets
     # a permanent record, not only sweep runs.
     results = {
-        "task":              TASK_ID,
-        "max_radius":         MAX_RADIUS,
-        "crown_radius":       CROWN_RADIUS,
-        "max_distance":       MAX_DISTANCE,
-        "min_points":         MIN_POINTS,
-        "min_peak_distance":  MIN_PEAK_DISTANCE,
-        "k":                  K,
-        "min_density_ratio":  MIN_DENSITY_RATIO,
-        "min_height":         MIN_HEIGHT,
-        "search_radius_m":    SEARCH_RADIUS_M,
-        "smooth_sigma":       SMOOTH_SIGMA,
-        "use_color":          USE_COLOR,
-        "color_weight":       COLOR_WEIGHT,
-        "min_exg":            MIN_EXG,
-        "min_cluster_height": MIN_POINT_HEIGHT,
-        "matching_score":    score,
-        **match_counts,    
-        }
+        "task": TASK_ID,
+        **{key: P[key] for key in RESULT_KEYS},
+        "matching_score": score,
+        **match_counts,
+    }
 
     # save results to results path
     results_path = os.path.join(os.path.dirname(PATHS['GPS_results']),
