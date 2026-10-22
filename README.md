@@ -5,8 +5,9 @@ A research project intended to identify drought-tolerant pinyon pines from drone
 <div align="center">
   <img src="assets/root/SSC_pinyon1.jpg" alt="A drought susceptable pinyon pine at site A in Sunset Crater, AZ." width="75%">
 </div>
-A drought susceptable pinyon pine at site A in Sunset Crater, AZ.
-
+A more drought tolerant pinyon pine at site A in Sunset Crater, AZ. 
+<br>
+<br>
 The pipeline takes in raw `.las` files, builds a Canopy Height Model, detects
 tree tops as CHM peaks, segments individual crowns via watershed, matches
 GPS-tagged ground-truth species to clusters, and trains a species classifier
@@ -16,7 +17,8 @@ on the labeled subset. All `.las` used have been exported from PixMapper4D.
   <img src="assets/root/PM4D_SC_aerial.png" alt="Screenshot of Structure-from-motion pointcloud of site A in Sunset Crater, AZ. Visualized using PixMapper4D." width="75%">
 </div>
 Screenshot of Structure-from-motion pointcloud of site A in Sunset Crater, AZ. Visualized using PixMapper4D.
-
+<br>
+<br>
 The project is split into two independent stages:
 
 - **`clustering/`** — everything expensive: point cloud processing, CHM,
@@ -37,6 +39,19 @@ These used to be one script (`main.py`). They were split apart because clusterin
 All python and bash coding has been done by Anthropic's Claude Sonnet models (versions 4.x and 5.x). Some slight touch ups have been done by myself on code outputted from claude. The web browser version has been used, and outputs are copied into NAU's Monsoon's VSCode IDE.
 
 ---
+
+## End Goals
+Ultimately, accurate prediction maps contatining species information and pinyon drought tolerance will be output for any group of `.las` files inputted. On top of that, I would like to create a more interactive app that shows more in-depth information on the clusters. 
+
+<div align="center">
+  <img src="assets/root/prediction_map.png" alt="Example of prediction map output from train_model.py. Created Oct. 2026" width="75%">
+</div>
+Example of prediction map output from train_model.py. Created Oct. 2026  
+<br>
+<br>
+I would also like to write and publish a scientific paper about detecting drought tolerance in pinyons
+<br>
+<br>
 
 ## Repository Structure
 (May not be completely up-to-date)
@@ -117,8 +132,9 @@ sbatch clustering/shells/pinyons.sh
 ```
 
 See [`clustering/README.md`](clustering/README.md) for CLI args, the
-`params.txt` sweep format, and current known quirks.
+`params.txt` sweep format, and current known quirks. Both `pinyons.sh` and `pinyon_sweep.sh` accept optional `-m` string arguments for notes along with the run, similar to `git commit -m`. 
 
+Job results for both sweeps and individual jobs can be found in `trial_data/{trial_name}/GPS_results/`. Log files for debugging or any printed outputs from any job are in `clustering/logs/`.
 ### 4. Train the classifier
 
 ```bash
@@ -139,8 +155,10 @@ exactly one detected cluster within `max_distance`.
 <div align="center">
   <img src="assets/root/cluster_label_overlay.png" alt="Graph displaying clusters and labels collected from the field of site A in Sunset Crater, AZ." width="75%">
 </div>
-Graph displaying clusters and labels collected from the field of site A in Sunset Crater, AZ.
-
+Graph displaying clusters and labels collected from the field of site A in Sunset Crater, AZ. 
+<br>
+<br>
+(Printed outputs from run_clustering.py below)
 ```
 Perfect matches (1:1):   197  (83.5%)
 No match:                26  (11.0%)
@@ -155,7 +173,7 @@ Best achieved on Sunset Crater so far: **~0.835**.
 ## The Data Bottleneck
 
 The labeled dataset is small — **~236 labeled clusters**, with **ponderosa
-at only ~20 samples**. This has been the fundamental constraint on
+at only ~20 samples** right now. This has been the fundamental constraint on
 classifier performance; no model architecture, oversampling, weighting, or
 feature engineering approach tried so far has overcome it. More labeled
 ground-truth data, not a better classifier, is the highest-leverage next
@@ -176,16 +194,14 @@ Species present: pinyon pine, juniper, ponderosa pine.
   <img src="assets/root/SSC_google_maps_SC.png" alt="Aerial screen shot of site A in Sunset Crater, AZ. Taken on Google Maps." width="75%">
 </div>
 Aerial screen shot of site A in Sunset Crater, AZ. Taken on Google Maps.
+<br>
 
----
 
 ## To Do List 
 
 - **Seperate Overlapping Trees (Current):** What I am currently working towards, there are a few trees that physically overlap that we gathered labels for. Overlapping trees are common, so having a method of seperation would be great. I am trying approaches based on seperating via hues, with some progress being made. After seperation, labels will need to be reassigned. 
 
-- **Collect & Implement Thermal Measurements:** Thermal data of the field site will hopefully help fursther strengthen species identification, and possibly even drought tolerance in pinyons. Goal to collect it by end of September 2026.
-
-- **Modelling Both Species & Drought Tolerance:** I have only worked on species modelling, and will begin pinyon tolerance modelling after the seperation of overlapping trees concludes. A big issue in the modelling currently is overlapping trees having traits of two trees, but only one of the labels, and the account for all mismatched clusters so far. Modelling drought tolerance is the original end goal of the project, so some more questions may get tacked on after this. 
+- **Collect & Implement Thermal Measurements:** Thermal data of the field site will hopefully help fursther strengthen species identification, and possibly even drought tolerance in pinyons. Goal to collect it by December 2026. 
 
 <div align="center">
   <img src="assets/root/confusion_matrix.png" alt="Best scoring model's confusion matrix as of Sep. 2026" width="75%">

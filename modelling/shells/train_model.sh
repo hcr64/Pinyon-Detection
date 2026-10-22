@@ -4,7 +4,7 @@
 #SBATCH --error=/scratch/hcr64/%j.err
 #SBATCH --chdir=/home/hcr64/Pinyon-Detection
 #SBATCH --time=00:30:00
-#SBATCH --mem=16G
+#SBATCH --mem=48G
 
 module load miniforge3/26.3.2
 source "$(conda info --base)/etc/profile.d/conda.sh"

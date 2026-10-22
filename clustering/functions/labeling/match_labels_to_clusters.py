@@ -7,7 +7,6 @@ from pyproj import Transformer
 from scipy.spatial import KDTree
 from scipy.optimize import linear_sum_assignment
 
-
 def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.0,
                               gps_sigma=3.0, job_id="",
                               graph_subtitle="No Title",
@@ -18,6 +17,7 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
                               stage_clusters=None,
                               diagnostic_save_path=None,
                               centroid_k=50,
+                              mm_cluster_stats_path=None,
                               silent=True):
     """
     Match GPS species labels to detected clusters via optimal one-to-one assignment,
@@ -183,7 +183,8 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
         from functions.labeling.save_multimatch_clusters import save_multimatch_clusters
         save_multimatch_clusters(
             csv_coords, cluster_coords, clusters, df_labels, df_clusters,
-            save_path=multi_match_save_path, max_distance=max_distance
+            save_path=multi_match_save_path, max_distance=max_distance,
+            stats_csv_path=mm_cluster_stats_path
         )
 
     # ── species scatter plot ──────────────────────────────────────────────────

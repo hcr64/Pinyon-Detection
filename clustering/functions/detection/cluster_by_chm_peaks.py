@@ -6,7 +6,7 @@ from skimage.morphology import dilation, disk
 import rasterio.transform
 
 
-def cluster_by_chm_peaks(point_cloud, peak_coords, chm, transform, crown_radius=2.0, min_points=40):
+def cluster_by_chm_peaks(point_cloud, peak_coords, chm, transform, crown_radius=2.0, min_points=40,mask_chm_filled=0.3):
     """
     Segment a point cloud into individual tree clusters using CHM watershed.
  
@@ -87,7 +87,7 @@ def cluster_by_chm_peaks(point_cloud, peak_coords, chm, transform, crown_radius=
 
     # mask: only flood cells with meaningful vegetation height
     # this stops watershed from bleeding far into bare ground
-    mask = chm_filled > 0.5   # metres — tune if needed
+    mask = chm_filled > mask_chm_filled   # metres — tune if needed
 
     labels_raster = watershed(surface, markers=markers, mask=mask)
     # labels_raster[r, c] == i  means pixel (r,c) belongs to peak i

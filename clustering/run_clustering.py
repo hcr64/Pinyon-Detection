@@ -106,7 +106,7 @@ PARAMS = {
     # live args that used to be hardcoded
     "crown_radius":       (float,    8.0),
     "min_density_ratio":  (float,    1.5),
-    "use_color":          (str2bool, True),
+    "use_color":          (str2bool, False),
     "color_weight":       (float,    10.0),
     "min_exg":            (float,    0.05),
     "min_cluster_height": (float,    1.5),
@@ -147,7 +147,7 @@ def main():
     P.update(FIXED)
 
     # technical vars
-    TRIAL_NAME, JOB_ID, NOTES, RESULTS_PATH, SAVE = args.trial_name, args.job_id, args.notes, args.results_path, args.save
+    TRIAL_NAME, JOB_ID, RESULTS_PATH, SAVE = args.trial_name, args.job_id, args.results_path, args.save
 
     # print the settings
     print("\n\n#### SETTINGS ####")
@@ -371,6 +371,7 @@ def main():
         stage_clusters=None, #stages if SAVE else None,
         diagnostic_save_path=PATHS['Dataframes'] + 'gps_loss_diagnosis.csv' if SAVE else None,
         centroid_k=P['k'],
+        mm_cluster_stats_path=PATHS['Dataframes'] + 'mm_clusters_stats.csv',
         silent=SILENT
     )
     print("Labels assigned.\n")
@@ -404,15 +405,8 @@ def main():
         **match_counts,
     }
 
-    # save results to results path
-    results_path = os.path.join(os.path.dirname(PATHS['GPS_results']),
-                                f"sweep_{SWEEP_ID}.csv")
-    preamble = [
-        f"# Sweep {SWEEP_ID} started {datetime.now():%Y-%m-%d %H:%M:%S}",
-        f"# Notes: {NOTES}",
-    ]
-    append_result_row(results_path, results, preamble=preamble)
-    print(f"Results saved to {results_path}")
+    append_result_row(RESULTS_PATH, results )
+    print(f"Results saved to {RESULTS_PATH}")
 
     # print ending message
     print("Clustering + labeling complete.")

@@ -321,8 +321,10 @@ def main():
         df_deep_clusters,
         df_clusters,
         save_path=PATHS['Images'],
-        chm_path=PATHS['CHM'],
-        min_confidence=0.95,   # set to None to plot every cluster
+        pcd_path=PATHS['Raw_pcd'],
+        basemap_cache=PATHS['Dataframes'] + 'topdown_basemap.npz',
+        chm_path=PATHS['CHM'],          # fallback only
+        min_confidence=0.90,
     )
     print(f"Prediction map saved to {PATHS['Images']}.\n")
 
