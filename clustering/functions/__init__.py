@@ -22,3 +22,6 @@ from .detection.filter_green_crown import filter_clusters_by_green_crown
 from .labeling.match_labels_to_clusters import match_labels_to_clusters
 from .labeling.save_multimatch_clusters import save_multimatch_clusters
 from .labeling.diagnose_gps_losses import diagnose_gps_losses
+from .labeling.build_label_csv import build_label_csv
+from .labeling.plot_problem_gps_areas import plot_problem_gps_areas
+from .labeling.filter_gps_by_coverage import filter_gps_by_coverage

@@ -46,12 +46,26 @@ Ultimately, accurate prediction maps contatining species information and pinyon 
 <div align="center">
   <img src="assets/root/prediction_map.png" alt="Example of prediction map output from train_model.py. Created Oct. 2026" width="75%">
 </div>
-Example of prediction map output from train_model.py. Created Oct. 2026  
+ Example of prediction map output from train_model.py. Created Oct. 2026  
 <br>
 <br>
-I would also like to write and publish a scientific paper about detecting drought tolerance in pinyons
+Prediction matrices below are from a run early Nov 2026, Macro F1 scores of 0.9 or higher are targeted. The first one is a specifier to distinguish between All Pinyons/Junipers/Ponderosas, then the one below is for pinyon drought classes. The models that lead to the best specifier results tend to be Support Vector Machine and XGBoost models, and the pinyon drought classifier varies. 
+
+<div align="center">
+  <img src="assets/root/cm_CalibratedSVM.png" alt="{Confusion Matrix of CSVM Specifier model as of Nov 2026}" width="75%">
+</div>
+
+Above: Specifier confusion matrix results, 
+Below: Pinyon drought class results.
 <br>
+<div align="center">
+  <img src="assets/root/drought_confusion_matrix.png" alt="{Confusion Matrix of pinyon drought model as of Nov 2026}" width="75%">
+</div>
+
 <br>
+I would also like to write and publish a scientific paper about detecting drought tolerance in pinyons via SfM, as well as their predicted growing patterns across elevation gradients. 
+<br>
+
 
 ## Repository Structure
 (May not be completely up-to-date)
@@ -103,7 +117,10 @@ Pinyon-Detection/
 
 ```bash
 bash shells/setup_venv.sh
-source open3d_env/bin/activate
+
+module load miniforge3/26.3.2
+source "$(conda info --base)/etc/profile.d/conda.sh"
+conda activate open3d_env
 ```
 
 Requires Python 3.10. Key dependencies: `open3d`, `numpy`, `scipy`,
@@ -145,6 +162,12 @@ See [`modelling/README.md`](modelling/README.md) for the enhancement
 toggles, the `--advanced` classifier comparison, and semi-supervised label
 spreading.
 
+### 5. (Optional) Do a full run
+```
+sbatch shells/run_full_pipeline.sh
+```
+Runs a clustering job then a modelling one, doing steps 3 and 4 with one script. Outputs of both sides go to `/run_outputs`, in a folder named `[TRIAL_NAME]_[JOB_ID]_[DATE]_[TIME]`. 
+
 ---
 
 ## Matching Score
@@ -184,7 +207,7 @@ step for the modelling side.
 ## Field Site
 
 **Sunset Crater**, Arizona. The scan area covers a cinder cone with
-significant terrain variation (~30 m relief). The irregular drone flight
+significant terrain variation. The irregular drone flight
 path means coverage is not a uniform rectangle — a `coverage_radius`
 proximity filter in the label matcher handles the non-rectangular footprint.
 
@@ -199,7 +222,7 @@ Aerial screen shot of site A in Sunset Crater, AZ. Taken on Google Maps.
 
 ## To Do List 
 
-- **Seperate Overlapping Trees (Current):** What I am currently working towards, there are a few trees that physically overlap that we gathered labels for. Overlapping trees are common, so having a method of seperation would be great. I am trying approaches based on seperating via hues, with some progress being made. After seperation, labels will need to be reassigned. 
+- **Seperate Overlapping Trees:** What I am currently working towards, there are a few trees that physically overlap that we gathered labels for. Overlapping trees are common, so having a method of seperation would be great. I am trying approaches based on seperating via hues, with some progress being made. After seperation, labels will need to be reassigned. 
 
 - **Collect & Implement Thermal Measurements:** Thermal data of the field site will hopefully help fursther strengthen species identification, and possibly even drought tolerance in pinyons. Goal to collect it by December 2026. 
 

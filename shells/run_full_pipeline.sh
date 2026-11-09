@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=pinyon_full_pipeline
-#SBATCH --output=/scratch/hcr64/full_run_%j.txt
-#SBATCH --error=/scratch/hcr64/full_run_%j.err
+#SBATCH --output=clustering/logs/full_run_%j.txt
+#SBATCH --error=clustering/logs/full_run_%j.err
 #SBATCH --chdir=/home/hcr64/Pinyon-Detection/
 #SBATCH --time=4:00:00
 #SBATCH --mem=64G
@@ -32,13 +32,13 @@ set -e
 # ── settings ─────────────────────────────────────────────────────────────────
 TRIAL_NAME="Sunset_sfm_trial"
 REPO=/home/hcr64/Pinyon-Detection
-OUT_ROOT=$REPO/run_outputs
+OUT_ROOT=$REPO/trial_data/$TRIAL_NAME/run_outputs
 
 # clustering parameters (same as clustering/shells/pinyons.sh)
 EPS=2.0
 GREEN=0.025
 RADIUS=4.25
-MAX_DISTANCE=4.0
+MAX_DISTANCE=5.0
 MIN_POINTS=40
 VOXEL_SIZE=0.08
 MIN_PEAK_DISTANCE=3.0
@@ -46,7 +46,7 @@ K=40
 MIN_HEIGHT=0.5
 SEARCH_RADIUS_M=2.5
 GPS_SIGMA=4.0
-SMOOTH_SIGMA=3
+SMOOTH_SIGMA=0.11
 
 # modelling flags (same as modelling/shells/train_model.sh)
 MODEL_FLAGS="--embeddings --advanced --drought"
@@ -71,6 +71,16 @@ echo "Run $RUN_ID  trial=$TRIAL_NAME  start=$(date '+%H:%M:%S')"
 echo "Output folder: $OUT_DIR"
 echo
 
+# the path to save results to
+RESULTS_PATH=trial_data/$TRIAL_NAME/GPS_results/full_pipeline_run_$SLURM_JOB_ID.csv
+
+# print header message
+mkdir -p "$(dirname "$RESULTS_PATH")"
+{
+    echo "# ==== sweep started $(date '+%Y-%m-%d %H:%M:%S') (SLURM full pipeline run ${SLURM_JOB_ID}) ===="
+    echo "# ==== Notes: ${MESSAGE} ===="
+} >> "$RESULTS_PATH"
+
 # ── stage 1: clustering + GPS labeling ───────────────────────────────────────
 echo "========== STAGE 1: clustering =========="
 python -u clustering/run_clustering.py \
@@ -88,6 +98,7 @@ python -u clustering/run_clustering.py \
     --smooth_sigma      $SMOOTH_SIGMA \
     --job_id            $RUN_ID \
     --save              $SAVE \
+    --results_path      $RESULTS_PATH \
     --trial_name        $TRIAL_NAME
 
 echo

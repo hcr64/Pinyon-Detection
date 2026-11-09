@@ -7,17 +7,22 @@ from pyproj import Transformer
 from scipy.spatial import KDTree
 from scipy.optimize import linear_sum_assignment
 
-def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.0,
+def match_labels_to_clusters(label_csv_path, df_clusters, max_distance=3.0,
                               gps_sigma=3.0, job_id="",
                               graph_subtitle="No Title",
                               graph_save_path="/home/hcr64/Pinyon-Detection/images/",
                               multi_match_save_path=None,
                               clusters=None,
-                              csv_path_2=None,
                               stage_clusters=None,
                               diagnostic_save_path=None,
+                              unmatched_gps_path=None,
                               centroid_k=50,
                               mm_cluster_stats_path=None,
+                              problem_area_pcd=None,
+                              problem_area_save_path=None,
+                              coverage_points_xy=None,   
+                              min_gps_coverage=0.0,     
+                              gps_coverage_radius=6.0,  
                               silent=True):
     """
     Match GPS species labels to detected clusters via optimal one-to-one assignment,
@@ -91,53 +96,22 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
 
     graph_title = f"GPS_Clusters"
 
-    # ── load and normalize labels ─────────────────────────────────────────────
+    # ── load processed labels (built by build_label_csv) ─────────────────────
+    df_labels = pd.read_csv(label_csv_path).rename(columns={"species": "Name"})
 
-    def load_and_filter(path):
-        df = pd.read_csv(path)
-        df = df[~df["Name"].str.lower().str.contains("dead", na=False)]
-        df = df[~df["Name"].str.lower().str.contains("point", na=False)]
+    required = ["x", "y", "Name", "drought_class", "drought_level"]
+    missing = [c for c in required if c not in df_labels.columns]
+    if missing:
+        raise ValueError(f"{label_csv_path} is missing columns {missing}. "
+                         f"Rebuild it with clustering/build_labels.py.")
 
-        raw_names = df["Name"].astype(str).str.strip()
-        tokens = raw_names.str.split()
+    df_labels = df_labels[df_labels["Name"].isin(["pinyon", "juniper", "ponderosa"])
+                          ].reset_index(drop=True)
 
-        df["Name"] = tokens.str[0].str.lower().str.strip()
-        df["Name"] = df["Name"].replace({"junioer": "juniper"})
-
-        tag = tokens.str[1:].str.join(" ").str.strip().str.upper()
-        tag_parts = tag.str.extract(r'^([TS])\s*(\d{1,2})?$')
-        
-        unparsed = raw_names[(tag != "") & tag_parts[0].isna()]
-        print("Tags present but NOT parsed:", unparsed.unique())
-        print("Parsed drought_class counts:\n", tag_parts[0].value_counts(dropna=False))
-
-        df["drought_class"] = tag_parts[0].map({"T": "tolerant", "S": "susceptible"})
-        df["drought_level"] = pd.to_numeric(tag_parts[1], errors="coerce")
-
-        df = df[df["Name"].isin(["pinyon", "juniper", "ponderosa"])].reset_index(drop=True)
-        return df
-
-    df_labels = load_and_filter(csv_path)
-
-    if csv_path_2 is not None:
-        df_labels_2 = load_and_filter(csv_path_2)
-        df_labels = pd.concat([df_labels, df_labels_2], ignore_index=True)
-        print(f"Merged labels from both CSVs.")
-
-    key = df_labels[["Latitude", "Longitude"]].round(5)   # ~1 m
-    print("Duplicate coords across CSVs:", key.duplicated(keep=False).sum())
-
-    print("Num Filtered Labels:", len(df_labels))
+    print("Num Labels:", len(df_labels))
     print(df_labels["Name"].value_counts())
 
-    # ── convert lat/lon to UTM ────────────────────────────────────────────────
-
-    transformer = Transformer.from_crs("EPSG:4326", "EPSG:26912", always_xy=True)
-    easting, northing = transformer.transform(
-        df_labels["Longitude"].values,
-        df_labels["Latitude"].values
-    )
-    csv_coords     = np.column_stack((easting, northing))
+    csv_coords     = df_labels[["x", "y"]].to_numpy()
     cluster_coords = np.array(list(zip(df_clusters["x_pos"], df_clusters["y_pos"])))
 
     # ── drop GPS labels outside the scanned area ──────────────────────────────
@@ -154,6 +128,16 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
 
     df_labels  = df_labels[in_coverage].reset_index(drop=True)
     csv_coords = csv_coords[in_coverage]
+
+    # Drop gps points around low point density areas
+    if min_gps_coverage > 0 and coverage_points_xy is not None:
+        from functions.labeling.filter_gps_by_coverage import filter_gps_by_coverage
+        csv_coords, df_labels, _ = filter_gps_by_coverage(
+            csv_coords, df_labels, coverage_points_xy,
+            radius=gps_coverage_radius, min_coverage=min_gps_coverage
+        )
+
+
 
     if stage_clusters is not None:
         from functions.labeling.diagnose_gps_losses import diagnose_gps_losses
@@ -178,6 +162,13 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
         max_distance=max_distance
         )
 
+    # save non-perfect gps points
+    if unmatched_gps_path is not None:
+        save_unmatched_gps_points(
+            csv_coords, cluster_coords, df_labels, df_clusters,
+            max_distance=max_distance, save_path=unmatched_gps_path
+        )
+
     # ── save clusters behind ambiguous "multiple clusters" GPS matches ───────
     if clusters is not None and multi_match_save_path is not None:
         from functions.labeling.save_multimatch_clusters import save_multimatch_clusters
@@ -185,6 +176,14 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
             csv_coords, cluster_coords, clusters, df_labels, df_clusters,
             save_path=multi_match_save_path, max_distance=max_distance,
             stats_csv_path=mm_cluster_stats_path
+        )
+
+    # ── top-down views of unmatched / multi-matched GPS points ───────────────
+    if problem_area_pcd is not None and problem_area_save_path is not None:
+        from functions.labeling.plot_problem_gps_areas import plot_problem_gps_areas
+        plot_problem_gps_areas(
+            csv_coords, df_labels, df_clusters, problem_area_pcd,
+            save_path=problem_area_save_path, max_distance=max_distance
         )
 
     # ── species scatter plot ──────────────────────────────────────────────────
@@ -264,6 +263,75 @@ def match_labels_to_clusters(csv_path, df_clusters, utm_zone=12, max_distance=3.
     print(f"Assignments rejected (> {max_distance}m): {n_rejected}")
 
     return df_clusters, score, match_counts
+
+
+def save_unmatched_gps_points(csv_coords, cluster_coords, df_labels, df_clusters,
+                              max_distance, save_path):
+    """
+    Save GPS points that are not a clean 1:1 match to a CSV.
+
+    Uses the same ball query as calculate_matching_score(), so the rows here
+    are exactly the points counted as "no match" or "multiple clusters".
+
+    Columns: gps_idx, status ("no_match" / "multi"), Name, drought_class,
+    Latitude, Longitude, x, y (UTM), n_clusters_in_range,
+    nearest_cluster_file, nearest_cluster_dist_m, and cluster_files_in_range
+    (";"-separated "file" indices, nearest first, for multi-matches).
+
+    Args:
+        csv_coords (np.ndarray): (M, 2) UTM GPS coords, aligned with df_labels.
+        cluster_coords (np.ndarray): (N, 2) cluster centroids, same row order
+            as df_clusters.
+        df_labels (pd.DataFrame): Label frame (after the coverage filter).
+        df_clusters (pd.DataFrame): Needs a "file" column.
+        max_distance (float): Same radius used for the matching score.
+        save_path (str): Full CSV path to write.
+
+    Returns:
+        pd.DataFrame: The rows written.
+    """
+    tree = KDTree(cluster_coords)
+    in_range = tree.query_ball_point(csv_coords, r=max_distance)
+    nearest_dist, nearest_idx = tree.query(csv_coords)
+    files = df_clusters["file"].values
+
+    inv = Transformer.from_crs("EPSG:26912", "EPSG:4326", always_xy=True)
+    lons, lats = inv.transform(csv_coords[:, 0], csv_coords[:, 1])
+
+    rows = []
+    for i, matches in enumerate(in_range):
+        if len(matches) == 1:
+            continue  # perfect match, skip
+
+        ordered = sorted(matches, key=lambda c: np.linalg.norm(csv_coords[i] - cluster_coords[c]))
+
+        rows.append({
+            "gps_idx":                i,
+            "status":                 "no_match" if len(matches) == 0 else "multi",
+            "Name":                   df_labels["Name"].iloc[i],
+            "drought_class":          df_labels["drought_class"].iloc[i] if "drought_class" in df_labels else None,
+            "Latitude":               round(float(lats[i]), 6),
+            "Longitude":              round(float(lons[i]), 6),
+            "x":                      round(csv_coords[i, 0], 3),
+            "y":                      round(csv_coords[i, 1], 3),
+            "n_clusters_in_range":    len(matches),
+            "nearest_cluster_file":   int(files[nearest_idx[i]]),
+            "nearest_cluster_dist_m": round(float(nearest_dist[i]), 2),
+            "cluster_files_in_range": ";".join(str(int(files[c])) for c in ordered),
+        })
+
+    df_out = pd.DataFrame(rows)
+
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    df_out.to_csv(save_path, index=False)
+
+    n_nm = (df_out["status"] == "no_match").sum() if len(df_out) else 0
+    n_mu = (df_out["status"] == "multi").sum() if len(df_out) else 0
+    print(f"Saved {n_nm} no-match and {n_mu} multi-match GPS points → {save_path}")
+
+    return df_out
+
+
 
 # ── scoring ───────────────────────────────────────────────────────────────────
 

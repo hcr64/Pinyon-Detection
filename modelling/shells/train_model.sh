@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=pinyon_train
-#SBATCH --output=/scratch/hcr64/%j.txt
-#SBATCH --error=/scratch/hcr64/%j.err
+#SBATCH --output=modelling/logs/job_%j.txt
+#SBATCH --error=modelling/logs/job_%j.err
 #SBATCH --chdir=/home/hcr64/Pinyon-Detection
 #SBATCH --time=00:30:00
 #SBATCH --mem=48G

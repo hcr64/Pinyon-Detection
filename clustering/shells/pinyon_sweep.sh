@@ -3,7 +3,7 @@
 #SBATCH --output=clustering/logs/sweep_%A_%a.out
 #SBATCH --error=clustering/logs/sweep_%A_%a.err
 #SBATCH --chdir=/home/hcr64/Pinyon-Detection/
-#SBATCH --array=1-3
+#SBATCH --array=1-30
 #SBATCH --time=01:00:00
 #SBATCH --mem=48G
 #SBATCH --partition=core

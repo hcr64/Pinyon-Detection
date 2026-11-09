@@ -95,25 +95,26 @@ PARAMS = {
     "k":                 (int,   REQUIRED),
     "min_height":        (float, REQUIRED),
     "search_radius_m":   (float, REQUIRED),
-    "smooth_sigma":      (float, REQUIRED),
+    "smooth_sigma":      (float, REQUIRED),   # metres now
 
-    # dead / no effect on matching_score, optional so pinyons.sh still works
+    # dead / no effect on matching_score
     "eps":               (float, 2.0),
     "green_threshold":   (float, 0.025),
     "voxel_size":        (float, 0.08),
     "gps_sigma":         (float, 4.0),
 
     # live args that used to be hardcoded
-    "crown_radius":       (float,    8.0),
-    "min_density_ratio":  (float,    1.5),
-    "use_color":          (str2bool, False),
-    "color_weight":       (float,    10.0),
-    "min_exg":            (float,    0.05),
-    "min_cluster_height": (float,    1.5),
+    "crown_radius":        (float,    8.0),
+    "min_density_ratio":   (float,    1.5),
+    "use_color":           (str2bool, True),
+    "color_weight":        (float,    10.0),
+    "min_exg":             (float,    0.05),
+    "green_fraction":      (float,    0.20),
+    "mask_chm_filled":     (float,    0.3),
+    "min_cluster_height":  (float,    1.5),
+    "min_gps_coverage":    (float,    0.95),
+    "gps_coverage_radius": (float,    6.0),
 }
-
-# not CLI args, not swept
-FIXED = {"mask_chm_filled": 0.3}
 
 # columns written to the results CSV, in order (dead params left out on purpose)
 RESULT_KEYS = [
@@ -138,13 +139,12 @@ def main():
     parser.add_argument("--trial_name", type=str, required=True)
     parser.add_argument("--job_id",     type=str, required=True)
     parser.add_argument("--notes",      type=str, default="N/A")
-    parser.add_argument("--results_path", type=str, default="N/A")
+    parser.add_argument("--results_path", type=str, default="")
     parser.add_argument("--save",       type=str2bool, default=True)
     args = parser.parse_args()
 
     # make the param dict
     P = {name: getattr(args, name) for name in PARAMS}
-    P.update(FIXED)
 
     # technical vars
     TRIAL_NAME, JOB_ID, RESULTS_PATH, SAVE = args.trial_name, args.job_id, args.results_path, args.save
@@ -169,6 +169,10 @@ def main():
 
     # to get more in-depth printed messages
     SILENT = True
+
+    # setting to false can save an almost an hour of runtime 
+    # WHen true it procudes more images of gps points etc. no effect on models or important outputs
+    DIAGNOSTICS = False
 
     # ── load raw point cloud ─────────────────────────────────────────────
     if STEPS['Load_Pointcloud'] and STEPS['Make_Raw_Clusters']:
@@ -249,7 +253,9 @@ def main():
             min_height=P['min_height'],
             search_radius_m=P['search_radius_m'],
             resolution=CHM_RESOLUTION,
-            smooth_sigma=P['smooth_sigma'])
+            smooth_sigma=P['smooth_sigma'] / CHM_RESOLUTION,
+            )
+
         print()
 
 
@@ -283,22 +289,6 @@ def main():
 
     stages = {"raw": clusters} 
 
-    # filter clusters by height
-    clusters = [
-        c for c in clusters
-        if np.asarray(c.points)[:, 2].max() - np.asarray(c.points)[:, 2].min() > P['min_cluster_height']
-    ]
-    stages["height>1.5"] = clusters
-
-    # filter clusters by how green their most green points are, my custom function
-    clusters = filter_clusters_by_green_crown(
-        clusters, 
-        top_fraction=0.20, 
-        min_exg=P['min_exg']
-        )
-    stages["green_crown"] = clusters
-
-
     # strip ground from the clusters, make sure it is just tree
     print("Stripping ground from clusters...")
     clusters = strip_ground_from_clusters(clusters, ground_percentile=10, min_height_above_ground=0.5)
@@ -320,16 +310,31 @@ def main():
         color_weight=P['color_weight'],
         save_pre_split_path=PATHS['PS_clusters'] if SAVE else None,
         silent=SILENT
-    )
+    )  
     print("Clusters split.\n")
     stages["split"] = clusters
+
+    # filter clusters by height
+    clusters = [
+        c for c in clusters
+        if np.asarray(c.points)[:, 2].max() - np.asarray(c.points)[:, 2].min() > P['min_cluster_height']
+    ]
+    stages["height>1.5"] = clusters
+
+    # filter clusters by how green their most green points are, my custom function
+    """clusters = filter_clusters_by_green_crown(
+        clusters, 
+        top_fraction=P['green_fraction'], 
+        min_exg=P['min_exg']
+        )
+    stages["green_crown"] = clusters"""
 
     # filter out clusters by height and radius, make sure they are all likely trees
     print("Filtering clusters...")
     before = len(clusters)
     clusters = [c for c in clusters if filter_cluster(c, min_height=1.0, min_radius=0.3)]
     print(f"Filtered {before - len(clusters)} non-tree clusters, {len(clusters)} remaining\n")
-    stages["final"] = clusters                       # must be last
+    stages["final"] = clusters                     # must be last
     
     # make dataframes, these are less complex that can also be sued for graphing
     print("Making cluster df...")
@@ -358,7 +363,6 @@ def main():
     df_clusters, score, match_counts = match_labels_to_clusters(
         PATHS['Labels'],
         df_clusters,
-        csv_path_2=os.path.dirname(PATHS['Labels']) + '/sunsetCraterMay26.csv',
         max_distance=P['max_distance'],
         graph_save_path=PATHS['Images'],
         gps_sigma=P['gps_sigma'],
@@ -369,9 +373,15 @@ def main():
         multi_match_save_path=PATHS["MM_save_path"] if SAVE else None,
         graph_subtitle=f"{P}",
         stage_clusters=None, #stages if SAVE else None,
-        diagnostic_save_path=PATHS['Dataframes'] + 'gps_loss_diagnosis.csv' if SAVE else None,
+        diagnostic_save_path=PATHS['Dataframes'] + 'gps_loss_diagnosis.csv' if SAVE and DIAGNOSTICS else None,
         centroid_k=P['k'],
         mm_cluster_stats_path=PATHS['Dataframes'] + 'mm_clusters_stats.csv',
+        unmatched_gps_path=PATHS['Dataframes'] + 'gps_unmatched.csv' if SAVE else None,
+        problem_area_pcd=point_cloud,
+        problem_area_save_path=PATHS['Images'] + 'problem_gps_areas/' if SAVE  and DIAGNOSTICS else None,
+        coverage_points_xy=np.asarray(point_cloud.points)[:, :2],
+        min_gps_coverage=P['min_gps_coverage'],
+        gps_coverage_radius=P['gps_coverage_radius'],
         silent=SILENT
     )
     print("Labels assigned.\n")
