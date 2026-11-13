@@ -9,7 +9,9 @@ STEPS = {
     # once done and saved, does not need to be ran again
     # takes less than 2 minutes 
     'Make_CHM':True,
-    
+
+    # makes all clusters, before any filtering is done. 
+    'Make_Raw_Clusters':False,
 }
 
 # path builder 
@@ -26,7 +28,7 @@ def get_paths(trial_name, scratch_dir='/scratch/hcr64/Pinyon-Detection/'):
     Returns:
         dict: Path strings keyed by role (Data, Raw_pcd, CHM, etc.)
     """
-    local_trial_dir = f'/home/hcr64/Pinyon-Detection/clustering/trial_data/{trial_name}/'
+    local_trial_dir = f'/home/hcr64/Pinyon-Detection/trial_data/{trial_name}/'
     scratch_dir=f'/scratch/hcr64/Pinyon-Detection/data/{trial_name}/'
 
     return {
@@ -44,6 +46,7 @@ def get_paths(trial_name, scratch_dir='/scratch/hcr64/Pinyon-Detection/'):
         'Raw_pcd':          scratch_dir + 'pointclouds/raw_pcd.ply',
         'Cleaned_pcd':      scratch_dir + 'pointclouds/cleaned_pcd.ply',
         'CHM':              scratch_dir + 'CFMs/chm.tif',
+        'Raw_Clusters':     scratch_dir + 'raw_clusters/',
         'Clusters':         scratch_dir + 'clusters/',
         'PS_clusters':      scratch_dir + 'pre_split_clusters/',
         'Labeled_clusters': scratch_dir + 'labeled_clusters/',
@@ -51,9 +54,15 @@ def get_paths(trial_name, scratch_dir='/scratch/hcr64/Pinyon-Detection/'):
 
 
         # local folder paths
-        'Labels':           local_trial_dir + 'labels/sunset-sfm.csv',
+        'Label_sources': [
+            local_trial_dir + 'labels/sunset-sfm.csv',
+            local_trial_dir + 'labels/sunsetCraterMay26.csv',
+            local_trial_dir + 'labels/Sunset_crater_oct292026.csv',
+        ],
+        'Labels': local_trial_dir + 'labels/processed_labels.csv',
+        
         'Images':           local_trial_dir + 'images/',
-        'GPS_results':      local_trial_dir + 'results/results_Jul18.csv',
+        'GPS_results':      local_trial_dir + 'GPS_results/',
         'Dataframes':       local_trial_dir + 'dataframes/',
         'Models':           local_trial_dir + 'models/',
     }

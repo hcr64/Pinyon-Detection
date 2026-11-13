@@ -106,7 +106,7 @@ PARAMS = {
     # live args that used to be hardcoded
     "crown_radius":        (float,    8.0),
     "min_density_ratio":   (float,    1.5),
-    "use_color":           (str2bool, True),
+    "use_color":           (str2bool, False), # Generally does better when turned off
     "color_weight":        (float,    10.0),
     "min_exg":             (float,    0.05),
     "green_fraction":      (float,    0.20),
@@ -114,6 +114,7 @@ PARAMS = {
     "min_cluster_height":  (float,    1.5),
     "min_gps_coverage":    (float,    0.95),
     "gps_coverage_radius": (float,    6.0),
+    "min_radius":        (float, 0.3),
 }
 
 # columns written to the results CSV, in order (dead params left out on purpose)
@@ -332,7 +333,7 @@ def main():
     # filter out clusters by height and radius, make sure they are all likely trees
     print("Filtering clusters...")
     before = len(clusters)
-    clusters = [c for c in clusters if filter_cluster(c, min_height=1.0, min_radius=0.3)]
+    clusters = [c for c in clusters if filter_cluster(c, min_height=P["min_height"], min_radius=P["min_radius"])]
     print(f"Filtered {before - len(clusters)} non-tree clusters, {len(clusters)} remaining\n")
     stages["final"] = clusters                     # must be last
     

@@ -1,4 +1,6 @@
-# Pinyon-Detection — Modelling
+## Detecting Drought Resistant Pinyon Pines using Aerial Structure-from-Motion
+
+# Modelling
 
 This is the cheap, iterate-quickly half of the pipeline: trains a species
 classifier (pinyon / juniper / ponderosa) on GPS-labeled clusters. Reads
@@ -59,7 +61,7 @@ need the predictions saved, add a `save_dataframes()` call at the end of
 ---
 
 ## Issues with the data
-There are currently only 294 total GPS recordings, with some of the points being discarded due to entry error (i.e "pinyon juniper" or "pinyon ponderosa"). Ponderosas are also heavily underrepresented in the data, with there only being about 20 total entries.
+There are currently ~310 total GPS recordings, with some of the points being discarded due to entry error (i.e "pinyon juniper" or "pinyon ponderosa"), or being out of bounds. Ponderosas are also heavily underrepresented in the data, with there only being about 25 total entries.
 
 Another issue discussed in the root README, are overlapping trees in a single cluster. Not only do they mess with label assignments in the clustering process, but also with model training. In the specification, there are a handful of these clusters that get constanly missclassified, and they likely mess up pinyon drought tolerance classification too. 
 
@@ -83,12 +85,13 @@ as CLI flags.
 
 ---
 ## Normal Features (Species Classifier)
-Without any flags, the a species classifier runs, that classifies trees as pinyons, ponderosas, and junipers, trained on labeled clusters. It runs a hanful of models, and outputs a confusion matrix of the best performer. 
+Without any flags, the a species classifier runs, that classifies trees as pinyons, ponderosas, and junipers, trained on labeled clusters. It runs a hanful of models, and outputs a confusion matrix of the best performer. All model outputs are in `trial_data/images/`. All confusion matrices are named `cm_[MODEL].png`.
 
 <div align="center">
-  <img src="../assets/modelling/confusion_matrix.png" alt="Species classifier confusion matrix of SVM_RBF (see advanced classifiers) model." width="75%">
+  <img src="../assets/root/cm_CalibratedSVM.png" alt="Species classifier confusion matrix of a Calibrated SVM (see advanced classifiers) model." width="75%">
 </div>
-Species classifier confusion matrix of SVM_RBF (see advanced classifiers) model.
+
+> Species classifier confusion matrix of a Calibrated SVM (see advanced classifiers) model.
 
 ---
 ## Advanced classifiers (`--advanced`)
@@ -98,12 +101,10 @@ calibrated SVM to the comparison. Requires `xgboost` and `lightgbm` in the
 venv — **not currently in `setup_venv.sh`**, install manually if you use
 `--advanced`:
 
-```bash
-pip install xgboost lightgbm
-```
+
 
 `--advanced` also runs semi-supervised `LabelSpreading` afterward, which
-propagates species labels from the ~166 labeled clusters to the ~3,400
+propagates species labels from the ~310 labeled clusters to the ~3,400
 unlabeled ones via an RBF similarity graph in feature space. Two diagnostic
 plots are saved: a confidence histogram and a height/radius scatter with
 labeled clusters ringed in black. Treat the printed "labeled-node recovery"
@@ -117,16 +118,18 @@ The pinyon drought tolerance prediction model takes only S for drought susceptib
 <div align="center">
   <img src="../assets/modelling/drought_confusion_matrix.png" alt="pinyon drought tolerant/susceptible confusion matrix." width="75%">
 </div>
-Above: pinyon drought tolerant/susceptible confusion matrix. 
+
+> Above: pinyon drought tolerant/susceptible confusion matrix. 
 
 
 <div align="center">
   <img src="../assets/modelling/combined_confusion_matrix.png" alt="Combined species classifier and pinyon drought tolerance confusion matrix of SVM_RBF (see advanced classifiers) model." width="75%">
 </div>
-Combined species classifier and pinyon drought tolerance confusion matrix of SVM_RBF (see advanced classifiers) model.
 
+> Combined species classifier and pinyon drought tolerance confusion matrix of SVM_RBF (see advanced classifiers) model.
 
-Both models run via the --drought flag. 
+The combined model generally has the sameor worse error as running the specifier model and drought class model individually. I have since focused on the specifier -> droight class models.
+The models run via the `--drought` and `--combined` flags. 
 
 ---
 ## Known Quirks

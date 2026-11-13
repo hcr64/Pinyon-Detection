@@ -16,5 +16,5 @@ python -u modelling/train_model.py \
     --trial_name $TRIAL_NAME \
     --embeddings \
     --advanced \
-    --drought
-    # --combined
+    --drought \
+    --combined
