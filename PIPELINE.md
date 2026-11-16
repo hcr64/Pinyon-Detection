@@ -459,7 +459,7 @@ Scratch is purged periodically; `pinyons.sh` `touch`es the input `.las` files so
 ## Debugging and utilities
 
 ```bash
-bash shells/debug.sh <JOB_ID>           # print a job's .txt and .err
+bash legacy_files/debug.sh <JOB_ID>           # print a job's .txt and .err
 bash shells/see_recent_jobs.sh          # recent jobs from sacct
 bash shells/clear_garbage_files.sh      # move finished jobs' logs to scratch
 ```
@@ -473,17 +473,13 @@ Clustering logs go to `clustering/logs/`, modelling logs to `modelling/logs/`.
 Real current behaviours, worth knowing before you spend a sweep on them.
 
 **Clustering**
-- **`constants.py` vs `run_clustering.py` mismatch.** `run_clustering.py` reads `STEPS['Make_Raw_Clusters']` and `PATHS['Raw_Clusters']`, but the `global_files/constants.py` I was given defines only `Load_Pointcloud` and `Make_CHM` and has no `Raw_Clusters` path. Confirm your live copy has them.
+
 - **`run_full_pipeline.sh` is out of sync.** Its parameters (`MIN_POINTS=40`, `K=40`, `MIN_HEIGHT=0.5`, `MIN_PEAK_DISTANCE=3.0`) are the old values, not the current `pinyons.sh` ones.
 - **`gps_sigma` doesn't move `matching_score`** (see above).
 - **`max_distance` plays two roles**: score radius and assignment cutoff. Raising it can trade no-matches for multi-matches rather than genuinely improving matching.
 - **Height normalisation isn't wired in.** `normalize_heights_by_ground()` exists but nothing calls it (it hurt scores at Sunset Crater).
-- **`split_large_clusters` docstring says `k` is unused, but it is** passed to `find_density_peaks()`.
-- `pinyon_sweep.sh` has `--array=1-3` while `params.txt` has 23 rows; set it to the row count.
 
 **Modelling**
 - **`train_tree_classifier()` ignores its `features` argument.** `train_model.py` passes `selected_features`, but inside the function `available` is built from `FEATURES`, not `features`, so the permutation-importance selection never restricts the models. Only the function's own `SELECTION` enhancement (`RF_selected`) reduces features. One-line fix: build `available` from `features`.
 - **`model_sweep.sh` is stale** relative to `train_model.py` (flags it passes don't exist).
 - Embeddings aren't used by any classifier unless `emb_*` are added to `FEATURES`.
-- The README claim that `FEATURES` is duplicated across three files is out of date: all classifiers now import from `feature_config.py`.
-- `xgboost` and `lightgbm` are in `setup_venv.sh` now; older notes saying to install them manually no longer apply.

@@ -7,7 +7,6 @@ A research project intended to identify drought-tolerant pinyon pines from drone
 </div>
  
 >Above: A more drought tolerant pinyon pine at site A in Sunset Crater, AZ. Taken by myself. 
-<br>
 
 <div align="center">
   <img src="assets/root/tolerant_and_susceptible.jpeg" alt="A  very drought tolerant pinyon pine on the left, and a  very susceptible pinyon on the right. Taken by myself at site A in Sunset Crater, AZ." width="75%">
@@ -15,7 +14,7 @@ A research project intended to identify drought-tolerant pinyon pines from drone
 
 > Above: A  drought tolerant pinyon pine on the left, and a  susceptible pinyon on the right. Taken by myself at site A in Sunset Crater, AZ. 
 
-<br>
+
 The pipeline takes in raw `.las` files, builds a Canopy Height Model, detects
 tree tops as CHM peaks, segments individual crowns via watershed, matches
 GPS-tagged ground-truth species to clusters, and trains a species classifier
@@ -27,13 +26,12 @@ on the labeled subset. All `.las` used have been exported from PixMapper4D.
 
 >Screenshot of Structure-from-motion pointcloud of site A in Sunset Crater, AZ. Visualized using PixMapper4D.
 
-<br>
 The project is split into two independent stages:
 
 - **`clustering/`** — everything expensive: point cloud processing, CHM,
   watershed segmentation, GPS label matching. Run via `run_clustering.py`,
   usually swept over many parameter combinations to optimize the matching
-  score. Depending on parameters, usually takes around 25 to 50 minutes (Not counting reading in .las files).
+  score. Depending on parameters, usually takes around 25 to 50 minutes (Not counting reading in .las files). More on runtime estimation in [`PIPELINE.md`](PIPELINE.md).
 
 - **`modelling/`** — species classification on the labeled clusters, and drought tolerance on pinyons.
   `clustering/` produced. Run via `train_model.py`, fast enough to iterate
@@ -57,54 +55,22 @@ Ultimately, accurate prediction maps contatining species information and pinyon 
 
 >Example of prediction map output from train_model.py. Created Oct. 2026 
 
-<br>
 Prediction matrices below are from a run early Nov 2026, Macro F1 scores of 0.9 or higher are targeted. The first one is a specifier to distinguish between All Pinyons/Junipers/Ponderosas, then the one below is for pinyon drought classes. Multiple models get trained for specification with many performing well, and Multi-Layer Perceptron models performing the most consistently.
 
 
 <div align="center">
   <img src="assets/root/cm_CalibratedSVM.png" alt="{Confusion Matrix of CSVM Specifier model as of Nov 2026}" width="75%">
-  <br>
 </div>
-
 
 >Above: Specifier confusion matrix results of a Support Vector Machine model.
 
-<br>
 <div align="center">
   <img src="assets/root/drought_confusion_matrix.png" alt="{Confusion Matrix of pinyon drought model as of Nov 2026}" width="75%">
-  <br>
-  <sub>
-  (Params for matrices: MAX_RADIUS: 4.25
-    MAX_DISTANCE: 5.0
-    MIN_POINTS: 40
-    MIN_PEAK_DISTANCE: 3.0
-    K: 40
-    MIN_HEIGHT: 0.5
-    SEARCH_RADIUS_M: 2.5
-    SMOOTH_SIGMA: 0.11
-    EPS: 2.0
-    GREEN_THRESHOLD: 0.025
-    VOXEL_SIZE: 0.08
-    GPS_SIGMA: 4.0
-    CROWN_RADIUS: 8.0
-    MIN_DENSITY_RATIO: 1.5
-    USE_COLOR: False
-    COLOR_WEIGHT: 10.0
-    MIN_EXG: 0.05
-    GREEN_FRACTION: 0.2
-    MASK_CHM_FILLED: 0.3
-    MIN_CLUSTER_HEIGHT: 1.5
-    MIN_GPS_COVERAGE: 0.9
-    GPS_COVERAGE_RADIUS: 6.0) </sub>
 </div>
-<br>
 
 >Above: Pinyon drought class modelling results and parameters used. 
 
-<br>
 I would also like to write and publish a scientific paper about detecting drought tolerance in pinyons via SfM, as well as their predicted growing patterns across elevation gradients. 
-<br>
-
 
 ## Repository Structure
 (May not be completely up-to-date)
@@ -187,7 +153,7 @@ Edit `clustering/constants.py`:
 sbatch clustering/shells/pinyons.sh
 ```
 
-See [`clustering/README.md`](clustering/README.md) for CLI args, the
+See [`PIPEPLINE.md`](PIPELINE.md) for CLI args, the
 `params.txt` sweep format, and current known quirks. Both `pinyons.sh` and `pinyon_sweep.sh` accept optional `-m` string arguments for notes along with the run, similar to `git commit -m`. 
 
 Job results for both sweeps and individual jobs can be found in `trial_data/{trial_name}/GPS_results/`. Log files for debugging or any printed outputs from any job are in `clustering/logs/`.
@@ -197,7 +163,7 @@ Job results for both sweeps and individual jobs can be found in `trial_data/{tri
 sbatch shells/train_model.sh
 ```
 
-See [`modelling/README.md`](modelling/README.md) for the enhancement
+See [`PIPEPLINE.md`](PIPELINE.md) again for the enhancement
 toggles, the `--advanced` classifier comparison, and semi-supervised label
 spreading.
 
@@ -220,7 +186,6 @@ exactly one detected cluster within `max_distance`.
 
 >Graph displaying clusters and labels collected from the field of site A in Sunset Crater, AZ. 
 
-<br>
 (Printed outputs from run_clustering.py below)
 
 ```
@@ -259,7 +224,6 @@ Species present: pinyon pine, juniper, ponderosa pine.
 </div>
 
 >Aerial screen shot of site A in Sunset Crater, AZ. Taken on Google Maps. 
-<br>
 
 ## Debugging
  Individual instances of clustering jobs have `.txt` and `.err` files in `clustering/logs/`, and modelling job logs live in `modelling/logs/`. The `.txt` files have the progress of the job along with it's results and parameters. In `run_clustering.py`, the variable `SILENT` produces even more in-depth outputs when set to `True`. 
@@ -269,7 +233,7 @@ Species present: pinyon pine, juniper, ponderosa pine.
 ## To Do List 
 
 - **Elevation Gradient/Large Flyover:** A final flyover covering a larger area over a more dramatic elevation gradient is an end goal idea to test final models. This would capture more and less  water stressed areas to possibly reveal patterns pinyon drought tolerance. This flyover could be a thin rectangle, or multiple flyights put together.
-- **Seperate Overlapping Trees:** What I am currently working towards, there are a few trees that physically overlap that we gathered labels for. Overlapping trees are common, so having a method of seperation would be great. I am trying approaches based on seperating via hues, with some progress being made. After seperation, labels will need to be reassigned. 
+- **Seperate Overlapping Trees:** A problem that I have been working on for quite a while, there are a few trees that physically overlap that we gathered labels for. Overlapping trees are common, so having a method of seperation would be ideal.
 
 - **Collect Thermal & Multispectral Data:** On top of the main research goal, looking at relationships between drought tolerance in pinyons and thermal & multipsectral data would be cool to explore. Hopefully multispectral data could be collected by December, but themal data may not be possible to get collected until warmer seasons. 
 
