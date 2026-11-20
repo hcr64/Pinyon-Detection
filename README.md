@@ -1,11 +1,17 @@
 # Detecting Drought Resistant Pinyon Pines using Aerial Structure-from-Motion
 
-A research project intended to identify drought-tolerant pinyon pines from drone-collected Structure-From-Motion pointclouds processed using PixMapper4D. Currently, data has only been collected from a field site at **Sunset Crater, AZ**. The processing is done on the **Monsoon** SLURM HPC cluster at Northern Arizona University. 
+A research project intended to identify drought-tolerant pinyon pines from drone-collected Structure-From-Motion pointclouds processed using PixMapper4D. Currently, data has only been collected from a field site at **Sunset Crater, AZ**. The processing is done on the Monsoon SLURM HPC cluster at Northern Arizona University. 
+
+Drought tolerance in pinyon pine (Pinus edulis) varies among individual trees growing side by side, and this variation is heritable ([Sthultz et al. 2009](https://doi.org/10.1111/j.1365-2486.2009.01901.x)).  Long-term monitoring shows that moth-susceptible, shrub-like trees on poor soils declined less during drought than resistant, upright trees ([Whipple et al. 2019](https://doi.org/10.3389/fpls.2019.00132)). Another part of the mechanism appears to be genetically determined differences in the ectomycorrhizal fungal communities that colonize a tree’s roots, which are passed from parent trees to seedlings ([Gehring et al. 2017](https://www.pnas.org/doi/full/10.1073/pnas.1704022114)).
+
+> **In this README moth-susceptible = drought-tolerant**, and moth classes will not be mentioned again going forward.
+
+ In the field, pinyons drought tolerance appeared to exist on a spectrum, so tree tags are recorded with numbers 1 (tolerant) through 10 (susceptible). The project itself currently ignores the exact number and only models on tolerant/susceptible pinyons. The number rankings are helpful as diagnostics for drought class model results. 
 
 <div align="center">
   <img src="assets/root/SSC_pinyon1.jpg" alt="A drought susceptable pinyon pine at site A in Sunset Crater, AZ." width="75%">
 </div>
- 
+
 >Above: A more drought tolerant pinyon pine at site A in Sunset Crater, AZ. Taken by myself. 
 
 <div align="center">
@@ -76,42 +82,96 @@ I would also like to write and publish a scientific paper about detecting drough
 (May not be completely up-to-date)
 ```
 Pinyon-Detection/
-├── README.md                 # this file
-├── PIPELINE.md                # detailed stage-by-stage walkthrough
-├── .gitignore                 # excludes generated point clouds, clusters, logs, venv
+├── README.md                      # project overview
+├── PIPELINE.md                    # stage-by-stage walkthrough + parameter reference
+├── .gitignore                     # excludes venv, generated clouds/clusters/logs
 │
-├── clustering/
-│   ├── run_clustering.py      # entry point — clustering + GPS labeling
-│   ├── constants.py           # STEPS flags, get_paths(trial_name)
-│   ├── functions/              # io, preprocessing, detection, labeling
-│   ├── shells/                 # pinyons.sh, pinyon_sweep.sh, Drive sync scripts
-│   └── parameters/             # params.txt sweep grids
+├── global_files/                  # shared by clustering/ and modelling/
+│   ├── __init__.py
+│   ├── constants.py               # STEPS flags, get_paths(trial_name)
+│   ├── get_pointcloud_stats.py    # clusters_to_dataframe, density-weighted centroid
+│   ├── get_deep_cluster_features.py  # make_deep_dataframe, engineer_features
+│   └── save_clusters.py           # save/load clusters + dataframes, save_predictions
 │
-├── modelling/
-│   ├── train_model.py         # entry point — classifier training
-│   └── functions/              # features, classification
+├── clustering/                    # expensive half: point cloud → GPS-labeled clusters
+│   ├── run_clustering.py          # entry point
+│   ├── params.txt                 # sweep grid (one row per SLURM array task)
+│   ├── functions/
+│   │   ├── io/
+│   │   │   ├── las_folder_to_pointcloud.py
+│   │   │   └── save_labeled_clusters.py
+│   │   ├── preprocessing/
+│   │   │   ├── build_chm.py       # CHM from external DSM, load_chm
+│   │   │   └── strip_ground_from_clusters.py
+│   │   ├── detection/
+│   │   │   ├── find_chm_peaks.py
+│   │   │   ├── cluster_by_chm_peaks.py   # watershed segmentation
+│   │   │   ├── split_large_clusters.py   # density peaks + Mean Shift
+│   │   │   └── filter_green_crown.py
+│   │   └── labeling/
+│   │       ├── build_label_csv.py
+│   │       ├── match_labels_to_clusters.py
+│   │       ├── filter_gps_by_coverage.py
+│   │       ├── diagnose_gps_losses.py
+│   │       ├── save_multimatch_clusters.py
+│   │       └── plot_problem_gps_areas.py
+│   ├── analysis/                  # one-off utility scripts
+│   │   ├── build_labels.py
+│   │   ├── compute_fine_peaks.py
+│   │   └── estimate_gps_offset.py
+│   ├── shells/
+│   │   ├── pinyons.sh             # single run, hand-tuned defaults
+│   │   ├── pinyon_sweep.sh        # SLURM array parameter sweep
+│   │   └── fine_peaks.sh
+│   └── logs/                      # SLURM stdout/stderr
 │
-├── shells/                    # cross-cutting utilities
-│   ├── train_model.sh
+├── modelling/                     # cheap half: species + drought classifiers
+│   ├── train_model.py             # entry point
+│   ├── model_params.txt           # classifier sweep grid (stale, see PIPELINE.md)
+│   ├── functions/
+│   │   ├── feature_config.py      # FEATURES: single source of truth
+│   │   ├── features/
+│   │   │   ├── select_best_features_rf.py
+│   │   │   ├── pointcloud_autoencoder.py
+│   │   │   ├── plot_feature_separability.py
+│   │   │   ├── plot_cluster_reality_check.py
+│   │   │   ├── plot_prediction_map.py
+│   │   │   └── diagnose_cluster_bimodality.py
+│   │   └── classification/
+│   │       ├── train_tree_classifier.py
+│   │       ├── advanced_classifiers.py
+│   │       ├── semi_supervised.py
+│   │       ├── evaluate_semi_supervised.py
+│   │       ├── train_drought_classifier.py
+│   │       ├── train_combined_classifier.py
+│   │       ├── inspect_misclassifications.py
+│   │       └── inspect_drought_misclassifications.py
+│   ├── shells/
+│   │   ├── train_model.sh
+│   │   └── model_sweep.sh
+│   └── logs/
+│
+├── shells/                        # cross-cutting utilities
 │   ├── setup_venv.sh
-│   ├── debug.sh
+│   ├── access_venv.sh
+│   ├── jupyter_kernel_env.sh
+│   ├── run_full_pipeline.sh       # clustering → modelling → collect plots
 │   ├── see_recent_jobs.sh
 │   └── clear_garbage_files.sh
 │
 ├── trial_data/
 │   └── Sunset_sfm_trial/
-│       ├── data/point_cloud/    # raw .las input files
-│       ├── pointclouds/         # saved raw and cleaned .ply files
-│       ├── CFMs/                # Canopy Height Model GeoTIFFs
-│       ├── clusters/            # segmented tree clusters (.ply)
-│       ├── labeled_clusters/    # clusters with GPS species labels
-│       ├── multi_match_clusters/# clusters behind ambiguous GPS matches
-│       ├── labels/              # GPS label CSVs
-│       ├── dataframes/          # cached df_clusters / df_deep_clusters
-│       ├── images/              # diagnostic plots
-│       └── results/             # sweep result CSVs
+│       ├── labels/                # raw + processed GPS label CSVs
+│       ├── dataframes/            # clusters.csv, deep_clusters.csv, predictions.csv
+│       ├── images/                # diagnostic plots, confusion matrices, prediction map
+│       ├── GPS_results/           # sweep_<id>.csv / job_<id>.csv
+│       ├── models/                # pointnet_ae.pt checkpoint
+│       └── run_outputs/           # run_full_pipeline.sh collected outputs
 │
-└── results/                   # legacy aggregate CSVs from early manual trials
+├── assets/                        # README images
+│
+├── results/                       # early manual-trial CSVs
+└── legacy_files/                  # retired code, old READMEs, old results
 ```
 
 ---
@@ -201,8 +261,8 @@ Best achieved on Sunset Crater so far: **~0.835**.
 
 ## The Data Bottleneck
 
-The labeled dataset is small — **~236 labeled clusters**, with **ponderosa
-at only ~20 samples** right now. This has been the fundamental constraint on
+The labeled dataset is small — **~319 labeled clusters**, with **ponderosa
+at only ~30 samples** right now. This has been the fundamental constraint on
 classifier performance; no model architecture, oversampling, weighting, or
 feature engineering approach tried so far has overcome it. More labeled
 ground-truth data, not a better classifier, is the highest-leverage next
